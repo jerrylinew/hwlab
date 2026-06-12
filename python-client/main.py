@@ -7,10 +7,9 @@ This script:
   1. Opens your webcam and runs MediaPipe hand + face detection on each frame.
   2. Draws what it sees on the video, which is streamed to the Vue app at
      /video_feed.
-  3. When it recognizes a gesture (open hand / fist) or a face, it sends a
-     "command" to the Seeed Studio XIAO webserver (see xiao_client.py) and
-     reports it over a WebSocket (/ws) so the Vue app can show it in the
-     "commands sent" panel.
+  3. When it recognizes a thumbs up, it sends the "true" command to the
+     Seeed Studio XIAO webserver (see xiao_client.py) and reports it over a
+     WebSocket (/ws) so the Vue app can show it in the "commands sent" panel.
 
 Look for the "STUDENTS: " comments below - those are the spots you can
 change to add your own gestures or behaviour.
@@ -86,52 +85,43 @@ class CommandBus:
 command_bus = CommandBus()
 
 
-def count_extended_fingers(hand_landmarks, handedness_label: str) -> int:
-    """STUDENTS: this is the core of gesture detection.
+# STUDENTS: example gesture - detects a "thumbs up" (fist with the thumb
+# sticking straight up out of it), regardless of which way the hand is
+# rotated.
+def is_thumbs_up(hand_landmarks) -> bool:
+    """Returns True if this hand is making a "thumbs up" gesture.
 
-    Returns how many fingers are "up" (extended) on one hand, by comparing
-    the y-position of each fingertip to the joint below it (lower y = higher
-    up on screen = extended), plus a special x-comparison for the thumb.
+    Two things have to be true:
+      1. The four fingers (index/middle/ring/pinky) are curled into a fist -
+         each fingertip is at or below the middle joint.
+      2. The thumb tip pokes out *above* the knuckle line of those
+         curled fingers - i.e. it's clearly sticking up out of the fist,
+         rather than resting across the front of it like a regular fist.
+
+    We don't check which way the thumb points left/right - a thumbs-up can
+    be held at many angles, so "pokes out above the fist" is a much more
+    reliable signal than "thumb leans toward one particular side".
     """
     landmarks = hand_landmarks.landmark
-    fingers_up = 0
+    Lm = mp.solutions.hands.HandLandmark
 
-    # Thumb: compare x instead of y because the thumb extends sideways.
-    thumb_tip_x = landmarks[mp.solutions.hands.HandLandmark.THUMB_TIP].x
-    thumb_ip_x = landmarks[mp.solutions.hands.HandLandmark.THUMB_IP].x
-    if handedness_label == "Right":
-        if thumb_tip_x < thumb_ip_x:
-            fingers_up += 1
-    else:
-        if thumb_tip_x > thumb_ip_x:
-            fingers_up += 1
-
-    # Index, middle, ring, pinky: tip above the lower knuckle == extended.
-    tip_joint_pairs = [
-        (mp.solutions.hands.HandLandmark.INDEX_FINGER_TIP, mp.solutions.hands.HandLandmark.INDEX_FINGER_PIP),
-        (mp.solutions.hands.HandLandmark.MIDDLE_FINGER_TIP, mp.solutions.hands.HandLandmark.MIDDLE_FINGER_PIP),
-        (mp.solutions.hands.HandLandmark.RING_FINGER_TIP, mp.solutions.hands.HandLandmark.RING_FINGER_PIP),
-        (mp.solutions.hands.HandLandmark.PINKY_TIP, mp.solutions.hands.HandLandmark.PINKY_PIP),
+    finger_tip_pip = [
+        (Lm.INDEX_FINGER_TIP, Lm.INDEX_FINGER_PIP),
+        (Lm.MIDDLE_FINGER_TIP, Lm.MIDDLE_FINGER_PIP),
+        (Lm.RING_FINGER_TIP, Lm.RING_FINGER_PIP),
+        (Lm.PINKY_TIP, Lm.PINKY_PIP),
     ]
-    for tip, pip in tip_joint_pairs:
+    for tip, pip in finger_tip_pip:
         if landmarks[tip].y < landmarks[pip].y:
-            fingers_up += 1
+            return False  # this finger is extended, not curled
 
-    return fingers_up
-
-
-def classify_gesture(fingers_up: int) -> str | None:
-    """STUDENTS: add your own gestures here!
-
-    `fingers_up` is a number from 0 (fist) to 5 (open hand). Return a short
-    command name, or None if this isn't a gesture you care about.
-    """
-    if fingers_up == 0:
-        return "fist"
-    if fingers_up == 5:
-        return "open_hand"
-    # STUDENTS: e.g. return "peace_sign" when fingers_up == 2
-    return None
+    knuckle_ys = [
+        landmarks[Lm.INDEX_FINGER_MCP].y,
+        landmarks[Lm.MIDDLE_FINGER_MCP].y,
+        landmarks[Lm.RING_FINGER_MCP].y,
+        landmarks[Lm.PINKY_MCP].y,
+    ]
+    return landmarks[Lm.THUMB_TIP].y < min(knuckle_ys)
 
 
 class CameraWorker:
@@ -175,7 +165,9 @@ class CameraWorker:
         hands = mp.solutions.hands.Hands(
             max_num_hands=2, min_detection_confidence=0.6, min_tracking_confidence=0.5
         )
-        face_detection = mp.solutions.face_detection.FaceDetection(min_detection_confidence=0.6)
+        face_detection = mp.solutions.face_detection.FaceDetection(
+            min_detection_confidence=0.6
+        )
         drawing = mp.solutions.drawing_utils
 
         while self._running:
@@ -194,21 +186,13 @@ class CameraWorker:
                 for hand_landmarks, handedness in zip(
                     hand_results.multi_hand_landmarks, hand_results.multi_handedness
                 ):
-                    drawing.draw_landmarks(frame, hand_landmarks, mp.solutions.hands.HAND_CONNECTIONS)
-
-                    handedness_label = handedness.classification[0].label
-                    fingers_up = count_extended_fingers(hand_landmarks, handedness_label)
-                    gesture = classify_gesture(fingers_up)
-                    if gesture is not None:
-                        cv2.putText(
-                            frame, gesture, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2
-                        )
-                        self._maybe_send_command(gesture)
+                    drawing.draw_landmarks(
+                        frame, hand_landmarks, mp.solutions.hands.HAND_CONNECTIONS
+                    )
 
             if face_results.detections:
                 for detection in face_results.detections:
                     drawing.draw_detection(frame, detection)
-                self._maybe_send_command("face_detected")
 
             ok, jpeg = cv2.imencode(".jpg", frame)
             if ok:
@@ -240,8 +224,7 @@ def _mjpeg_generator():
         frame = camera_worker.get_frame()
         if frame is not None:
             yield (
-                boundary + b"\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                boundary + b"\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
             )
         time.sleep(0.033)  # ~30 fps
 

@@ -1,18 +1,14 @@
-# OpenCV Gesture & Face Lab
-
-A teaching setup where students write OpenCV gesture/face-detection code in
-Python. When a gesture or face is detected, a command is sent to a Seeed
-Studio XIAO webserver. A Vue app shows the live (annotated) webcam feed and a
-log of commands sent.
+# OpenCV Gesture & Face
 
 ## Quick start
+
+Make sure that Nix is installed on the computer
 
 ```sh
 nix develop
 ```
 
-This sets up a Python virtualenv (OpenCV, MediaPipe, FastAPI) and gives you
-Node.js for the Vue app.
+This sets up a Python venv and gives you Node.js for the Vue app. This is the simple dev shell with all the necessary dependencies. 
 
 ### Run the Python client
 
@@ -36,6 +32,8 @@ cd vue-client
 npm install
 npm run dev
 ```
+
+A lot of this is currently a lot of the code is done and documented within the `main.py` so visit it if you have any possible questions. 
 
 Open the printed local URL. You should see the webcam feed on the left and a
 "Commands Sent" log on the right.
