@@ -1,0 +1,4 @@
+python-client/.venv/
+python-client/__pycache__/
+vue-client/node_modules/
+vue-client/dist/
