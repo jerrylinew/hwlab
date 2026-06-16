@@ -1,5 +1,7 @@
 opencv-python-headless
-mediapipe
+# Pinned: newer mediapipe wheels (0.10.30+) drop the legacy `mp.solutions` API
+# on macOS arm64, which this lab uses for hand/face detection. 0.10.14 ships it.
+mediapipe==0.10.14
 fastapi
 uvicorn[standard]
 websockets
