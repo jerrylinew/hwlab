@@ -1,6 +1,7 @@
 <script setup>
 import CommandLog from "./components/CommandLog.vue";
 import VideoFeed from "./components/VideoFeed.vue";
+import DiagnosticsPanel from "./components/DiagnosticsPanel.vue";
 
 const pyServer = import.meta.env.VITE_PY_SERVER ?? "http://localhost:8000";
 const videoFeedUrl = `${pyServer}/video_feed`;
@@ -18,6 +19,7 @@ const wsUrl = `${pyServer.replace(/^http/, "ws")}/ws`;
       <VideoFeed :src="videoFeedUrl" />
       <CommandLog :ws-url="wsUrl" />
     </div>
+    <DiagnosticsPanel :ws-url="wsUrl" :video-feed-url="videoFeedUrl" />
   </main>
 </template>
 
