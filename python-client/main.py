@@ -29,6 +29,8 @@ from cv import init_acceleration, HandDetector, FaceDetector, is_thumbs_up
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
+websocket = True  # websocket for sending and receiving data from seed studio xiao
+
 # Minimum seconds between sending the same command to the XIAO.
 COMMAND_COOLDOWN_SECONDS = 2.0
 
@@ -130,7 +132,7 @@ class CameraWorker:
 
     @staticmethod
     def _send_and_publish(command: str) -> None:
-        sent_ok = send_command(command)
+        sent_ok = send_command(command) if websocket else False
         command_bus.publish(command, sent_ok)
 
     def _run(self) -> None:

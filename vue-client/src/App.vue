@@ -1,25 +1,16 @@
 <script setup>
-import CommandLog from "./components/CommandLog.vue";
-import VideoFeed from "./components/VideoFeed.vue";
-import DiagnosticsPanel from "./components/DiagnosticsPanel.vue";
+import LabDashboard from "./components/LabDashboard.vue";
 
 const pyServer = import.meta.env.VITE_PY_SERVER ?? "http://localhost:8000";
-const videoFeedUrl = `${pyServer}/video_feed`;
-const wsUrl = `${pyServer.replace(/^http/, "ws")}/ws`;
 </script>
 
 <template>
   <main>
-    <h1>OpenCV Gesture &amp; Face Lab</h1>
-    <p>
-      This page shows what your Python OpenCV script sees, and any commands it
-      sends to your Seeed Studio XIAO.
-    </p>
-    <div class="layout">
-      <VideoFeed :src="videoFeedUrl" />
-      <CommandLog :ws-url="wsUrl" />
-    </div>
-    <DiagnosticsPanel :ws-url="wsUrl" :video-feed-url="videoFeedUrl" />
+    <h1>HW Lab</h1>
+
+    <LabDashboard :py-server="pyServer" />
+
+    <!-- Add your own components below -->
   </main>
 </template>
 
@@ -29,16 +20,5 @@ main {
   max-width: 1100px;
   margin: 0 auto;
   padding: 24px;
-}
-
-.layout {
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.layout > * {
-  flex: 1;
-  min-width: 320px;
 }
 </style>

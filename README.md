@@ -81,3 +81,6 @@ responsive regardless.
 2. Import it in `main.py`
 3. Add a check in the camera worker's `_run()` loop (follow the thumbs_up pattern)
 4. Handle the new command in `xiao/xiao.ino` (`handle_command()`)
+
+## Adding to the vue client
+learn JS and Vue. Use these [elements](https://element-plus.org/en-US/component/overview) to help things look good.
