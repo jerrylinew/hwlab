@@ -14,14 +14,24 @@ example and the server wiring.
 import asyncio
 import concurrent.futures
 import json
+import os
 import threading
 import time
 from datetime import datetime, timezone
 
+# On macOS, OpenCV tries to request camera permission the first time it opens
+# the webcam - but that request can only run on the app's main thread. We open
+# the camera from a background thread (see CameraWorker), so without this the
+# app crashes with "can not spin main run loop from other thread". Skipping the
+# built-in request means macOS itself handles permission: the first run asks
+# (or you grant your terminal access under System Settings -> Privacy &
+# Security -> Camera). This must be set before `import cv2`.
+os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
+
 import cv2
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from starlette.websockets import WebSocketState
 
 from xiao_client import send_command
@@ -162,34 +172,23 @@ class CameraWorker:
 
             frame = cv2.flip(frame, 1)
 
-            # ── Detection ────────────────────────────────────────────────
-            hand_results = hand_detector.process(frame)
-            face_results = face_detector.process(frame)
+            if hand_results.multi_hand_landmarks:
+                for hand_landmarks, handedness in zip(
+                    hand_results.multi_hand_landmarks, hand_results.multi_handedness
+                ):
+                    drawing.draw_landmarks(
+                        frame, hand_landmarks, mp.solutions.hands.HAND_CONNECTIONS
+                    )
 
-            # ── Gesture: Thumbs Up ───────────────────────────────────────
-            # Require GESTURE_CONFIRM_FRAMES consecutive positive detections
-            # before firing, to suppress single-frame false positives.
-            thumbs_detected = False
-            if hand_results and hand_results.multi_hand_landmarks:
-                for hand_lm in hand_results.multi_hand_landmarks:
-                    if is_thumbs_up(hand_lm):
-                        thumbs_detected = True
-                        break
+                    if is_thumbs_up(hand_landmarks):
+                        self._maybe_send_command("true")
 
-            if thumbs_detected:
-                self._thumbs_up_count += 1
-                if self._thumbs_up_count >= GESTURE_CONFIRM_FRAMES:
-                    self._maybe_send("thumbs_up")
-            else:
-                self._thumbs_up_count = 0
+            if face_results.detections:
+                for detection in face_results.detections:
+                    drawing.draw_detection(frame, detection)
 
-            # ── Draw overlays ────────────────────────────────────────────
-            hand_detector.draw(frame, hand_results)
-            face_detector.draw(frame, face_results)
-
-            # ── Encode and store ─────────────────────────────────────────
-            ret, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            if ret:
+            ok, jpeg = cv2.imencode(".jpg", frame)
+            if ok:
                 with self._lock:
                     self._latest_frame = jpeg.tobytes()
 
@@ -220,6 +219,29 @@ def _mjpeg_stream():
         if frame is not None:
             yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
         time.sleep(0.033)
+
+
+# This server only provides the video stream and the command WebSocket - the
+# actual UI lives in the Vue app. Opening this server's root in a browser used
+# to show a bare "Not Found", so this gives a friendly pointer instead.
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return """
+    <html>
+      <body style="font-family: sans-serif; max-width: 640px; margin: 40px auto;">
+        <h1>OpenCV Gesture &amp; Face Lab - Python server</h1>
+        <p>This server is running correctly. It only provides data, not the UI.</p>
+        <p><strong>Open the Vue viewer instead</strong> (run <code>npm run dev</code>
+           in <code>vue-client</code>, then open the URL it prints, usually
+           <a href="http://localhost:5173">http://localhost:5173</a>).</p>
+        <p>Endpoints served here:</p>
+        <ul>
+          <li><a href="/video_feed">/video_feed</a> - live annotated webcam stream</li>
+          <li><code>/ws</code> - WebSocket of commands sent to the XIAO</li>
+        </ul>
+      </body>
+    </html>
+    """
 
 
 @app.get("/video_feed")
