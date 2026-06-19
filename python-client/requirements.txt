@@ -1,6 +1,11 @@
+# Core CV (use opencv-python instead of headless if you need GUI windows)
 opencv-python-headless
 mediapipe
+
+# Web server
 fastapi
 uvicorn[standard]
 websockets
+
+# XIAO HTTP client
 requests

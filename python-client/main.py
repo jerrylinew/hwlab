@@ -1,38 +1,42 @@
-"""OpenCV Gesture & Face Lab - student-editable client.
+"""Thumbs-Up Gesture Server.
 
 Run with:
     uvicorn main:app --reload
 
-This script:
-  1. Opens your webcam and runs MediaPipe hand + face detection on each frame.
-  2. Draws what it sees on the video, which is streamed to the Vue app at
-     /video_feed.
-  3. When it recognizes a thumbs up, it sends the "true" command to the
-     Seeed Studio XIAO webserver (see xiao_client.py) and reports it over a
-     WebSocket (/ws) so the Vue app can show it in the "commands sent" panel.
+Detects a thumbs-up gesture via webcam and sends a command to the
+Seeed Studio XIAO ESP32C3. The annotated video feed is streamed at
+/video_feed and commands are broadcast over WebSocket at /ws.
 
-Look for the "STUDENTS: " comments below - those are the spots you can
-change to add your own gestures or behaviour.
+All CV logic lives in the cv/ module — this file is just the gesture
+example and the server wiring.
 """
 
 import asyncio
+import concurrent.futures
 import json
 import threading
 import time
 from datetime import datetime, timezone
 
 import cv2
-import mediapipe as mp
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.websockets import WebSocketState
 
 from xiao_client import send_command
+from cv import init_acceleration, HandDetector, FaceDetector, is_thumbs_up
 
-# How long (seconds) to wait before sending the same command again.
-# This stops a held-up gesture from spamming the XIAO with commands.
+# ─── Configuration ───────────────────────────────────────────────────────────
+
+# Minimum seconds between sending the same command to the XIAO.
 COMMAND_COOLDOWN_SECONDS = 2.0
+
+# Number of consecutive frames a gesture must be detected before firing.
+# Prevents single-frame false positives from triggering commands.
+GESTURE_CONFIRM_FRAMES = 3
+
+# ─── FastAPI app ─────────────────────────────────────────────────────────────
 
 app = FastAPI()
 app.add_middleware(
@@ -43,8 +47,10 @@ app.add_middleware(
 )
 
 
+# ─── WebSocket command bus ───────────────────────────────────────────────────
+
 class CommandBus:
-    """Keeps track of connected websocket clients and broadcasts commands."""
+    """Broadcasts commands to all connected WebSocket clients."""
 
     def __init__(self) -> None:
         self._clients: set[WebSocket] = set()
@@ -61,78 +67,43 @@ class CommandBus:
         self._clients.discard(websocket)
 
     def publish(self, command: str, sent_to_xiao: bool) -> None:
-        """Called from the (non-async) camera thread to broadcast a command."""
+        """Called from the camera thread to broadcast a command."""
         if self._loop is None:
             return
-        message = json.dumps(
-            {
-                "command": command,
-                "sent_to_xiao": sent_to_xiao,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-        )
+        message = json.dumps({
+            "command": command,
+            "sent_to_xiao": sent_to_xiao,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
         asyncio.run_coroutine_threadsafe(self._broadcast(message), self._loop)
 
     async def _broadcast(self, message: str) -> None:
-        for websocket in list(self._clients):
-            if websocket.client_state == WebSocketState.CONNECTED:
+        for ws in list(self._clients):
+            if ws.client_state == WebSocketState.CONNECTED:
                 try:
-                    await websocket.send_text(message)
+                    await ws.send_text(message)
                 except Exception:
-                    self.disconnect(websocket)
+                    self.disconnect(ws)
 
 
 command_bus = CommandBus()
 
 
-# STUDENTS: example gesture - detects a "thumbs up" (fist with the thumb
-# sticking straight up out of it), regardless of which way the hand is
-# rotated.
-def is_thumbs_up(hand_landmarks) -> bool:
-    """Returns True if this hand is making a "thumbs up" gesture.
-
-    Two things have to be true:
-      1. The four fingers (index/middle/ring/pinky) are curled into a fist -
-         each fingertip is at or below the middle joint.
-      2. The thumb tip pokes out *above* the knuckle line of those
-         curled fingers - i.e. it's clearly sticking up out of the fist,
-         rather than resting across the front of it like a regular fist.
-
-    We don't check which way the thumb points left/right - a thumbs-up can
-    be held at many angles, so "pokes out above the fist" is a much more
-    reliable signal than "thumb leans toward one particular side".
-    """
-    landmarks = hand_landmarks.landmark
-    Lm = mp.solutions.hands.HandLandmark
-
-    finger_tip_pip = [
-        (Lm.INDEX_FINGER_TIP, Lm.INDEX_FINGER_PIP),
-        (Lm.MIDDLE_FINGER_TIP, Lm.MIDDLE_FINGER_PIP),
-        (Lm.RING_FINGER_TIP, Lm.RING_FINGER_PIP),
-        (Lm.PINKY_TIP, Lm.PINKY_PIP),
-    ]
-    for tip, pip in finger_tip_pip:
-        if landmarks[tip].y < landmarks[pip].y:
-            return False  # this finger is extended, not curled
-
-    knuckle_ys = [
-        landmarks[Lm.INDEX_FINGER_MCP].y,
-        landmarks[Lm.MIDDLE_FINGER_MCP].y,
-        landmarks[Lm.RING_FINGER_MCP].y,
-        landmarks[Lm.PINKY_MCP].y,
-    ]
-    return landmarks[Lm.THUMB_TIP].y < min(knuckle_ys)
-
+# ─── Camera worker ───────────────────────────────────────────────────────────
 
 class CameraWorker:
-    """Runs the webcam + MediaPipe loop in a background thread."""
+    """Webcam + detection loop running in a background thread."""
 
     def __init__(self) -> None:
-        self._latest_frame_jpeg: bytes | None = None
+        self._latest_frame: bytes | None = None
         self._lock = threading.Lock()
         self._last_sent: dict[str, float] = {}
         self._running = False
         self._thread: threading.Thread | None = None
+        self._send_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+        # Consecutive-frame gesture confirmation counters
+        self._thumbs_up_count = 0
 
     def start(self) -> None:
         if self._running:
@@ -143,69 +114,94 @@ class CameraWorker:
 
     def stop(self) -> None:
         self._running = False
+        self._send_pool.shutdown(wait=False)
 
     def get_frame(self) -> bytes | None:
         with self._lock:
-            return self._latest_frame_jpeg
+            return self._latest_frame
 
-    def _maybe_send_command(self, command: str) -> None:
-        """Send `command` to the XIAO, but only if it hasn't been sent
-        recently (see COMMAND_COOLDOWN_SECONDS)."""
+    def _maybe_send(self, command: str) -> None:
+        """Send command to XIAO if cooldown has elapsed (non-blocking)."""
         now = time.monotonic()
-        last_sent = self._last_sent.get(command, 0.0)
-        if now - last_sent < COMMAND_COOLDOWN_SECONDS:
+        if now - self._last_sent.get(command, 0.0) < COMMAND_COOLDOWN_SECONDS:
             return
         self._last_sent[command] = now
+        self._send_pool.submit(self._send_and_publish, command)
 
+    @staticmethod
+    def _send_and_publish(command: str) -> None:
         sent_ok = send_command(command)
         command_bus.publish(command, sent_ok)
 
     def _run(self) -> None:
+        accel = init_acceleration()
+        print(f"[cv] Hardware acceleration: {accel}")
+
         cap = cv2.VideoCapture(0)
-        hands = mp.solutions.hands.Hands(
-            max_num_hands=2, min_detection_confidence=0.6, min_tracking_confidence=0.5
+        # Lower capture resolution to reduce processing load
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+        hand_detector = HandDetector(
+            max_hands=2,
+            detection_confidence=0.7,
+            tracking_confidence=0.6,
+            model_complexity=0,       # lite model — much faster
+            process_every_n_frames=2, # skip every other frame
         )
-        face_detection = mp.solutions.face_detection.FaceDetection(
-            min_detection_confidence=0.6
+        face_detector = FaceDetector(
+            detection_confidence=0.6,
+            process_every_n_frames=3,
         )
-        drawing = mp.solutions.drawing_utils
 
         while self._running:
-            success, frame = cap.read()
-            if not success:
-                time.sleep(0.1)
+            ok, frame = cap.read()
+            if not ok:
+                time.sleep(0.05)
                 continue
 
             frame = cv2.flip(frame, 1)
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            hand_results = hands.process(rgb_frame)
-            face_results = face_detection.process(rgb_frame)
+            # ── Detection ────────────────────────────────────────────────
+            hand_results = hand_detector.process(frame)
+            face_results = face_detector.process(frame)
 
-            if hand_results.multi_hand_landmarks:
-                for hand_landmarks, handedness in zip(
-                    hand_results.multi_hand_landmarks, hand_results.multi_handedness
-                ):
-                    drawing.draw_landmarks(
-                        frame, hand_landmarks, mp.solutions.hands.HAND_CONNECTIONS
-                    )
+            # ── Gesture: Thumbs Up ───────────────────────────────────────
+            # Require GESTURE_CONFIRM_FRAMES consecutive positive detections
+            # before firing, to suppress single-frame false positives.
+            thumbs_detected = False
+            if hand_results and hand_results.multi_hand_landmarks:
+                for hand_lm in hand_results.multi_hand_landmarks:
+                    if is_thumbs_up(hand_lm):
+                        thumbs_detected = True
+                        break
 
-            if face_results.detections:
-                for detection in face_results.detections:
-                    drawing.draw_detection(frame, detection)
+            if thumbs_detected:
+                self._thumbs_up_count += 1
+                if self._thumbs_up_count >= GESTURE_CONFIRM_FRAMES:
+                    self._maybe_send("thumbs_up")
+            else:
+                self._thumbs_up_count = 0
 
-            ok, jpeg = cv2.imencode(".jpg", frame)
-            if ok:
+            # ── Draw overlays ────────────────────────────────────────────
+            hand_detector.draw(frame, hand_results)
+            face_detector.draw(frame, face_results)
+
+            # ── Encode and store ─────────────────────────────────────────
+            ret, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if ret:
                 with self._lock:
-                    self._latest_frame_jpeg = jpeg.tobytes()
+                    self._latest_frame = jpeg.tobytes()
 
         cap.release()
-        hands.close()
-        face_detection.close()
+        hand_detector.close()
+        face_detector.close()
 
 
 camera_worker = CameraWorker()
 
+
+# ─── Routes ──────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
 async def on_startup() -> None:
@@ -218,21 +214,19 @@ async def on_shutdown() -> None:
     camera_worker.stop()
 
 
-def _mjpeg_generator():
-    boundary = b"--frame"
+def _mjpeg_stream():
     while True:
         frame = camera_worker.get_frame()
         if frame is not None:
-            yield (
-                boundary + b"\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
-            )
-        time.sleep(0.033)  # ~30 fps
+            yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+        time.sleep(0.033)
 
 
 @app.get("/video_feed")
 def video_feed():
     return StreamingResponse(
-        _mjpeg_generator(), media_type="multipart/x-mixed-replace; boundary=frame"
+        _mjpeg_stream(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
 
@@ -241,8 +235,6 @@ async def websocket_endpoint(websocket: WebSocket):
     await command_bus.connect(websocket)
     try:
         while True:
-            # We don't expect messages from the client, but keep the
-            # connection alive and detect disconnects.
             await websocket.receive_text()
     except WebSocketDisconnect:
         command_bus.disconnect(websocket)
