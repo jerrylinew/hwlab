@@ -174,22 +174,27 @@ class CameraWorker:
 
             frame = cv2.flip(frame, 1)
 
-            if hand_results.multi_hand_landmarks:
-                for hand_landmarks, handedness in zip(
-                    hand_results.multi_hand_landmarks, hand_results.multi_handedness
-                ):
-                    drawing.draw_landmarks(
-                        frame, hand_landmarks, mp.solutions.hands.HAND_CONNECTIONS
-                    )
+            hand_results = hand_detector.process(frame)
+            face_results = face_detector.process(frame)
 
+            thumbs_detected = False
+            if hand_results and hand_results.multi_hand_landmarks:
+                for hand_landmarks in hand_results.multi_hand_landmarks:
                     if is_thumbs_up(hand_landmarks):
-                        self._maybe_send_command("true")
+                        thumbs_detected = True
+                        break
 
-            if face_results.detections:
-                for detection in face_results.detections:
-                    drawing.draw_detection(frame, detection)
+            if thumbs_detected:
+                self._thumbs_up_count += 1
+                if self._thumbs_up_count >= GESTURE_CONFIRM_FRAMES:
+                    self._maybe_send("thumbs_up")
+            else:
+                self._thumbs_up_count = 0
 
-            ok, jpeg = cv2.imencode(".jpg", frame)
+            hand_detector.draw(frame, hand_results)
+            face_detector.draw(frame, face_results)
+
+            ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
             if ok:
                 with self._lock:
                     self._latest_frame = jpeg.tobytes()

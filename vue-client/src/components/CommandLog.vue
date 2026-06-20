@@ -1,5 +1,8 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from "vue";
+import { toRef } from "vue";
+
+import { useCommandLog } from "../composables/useCommandLog";
+import { formatCommandTime } from "../lib/pythonServer";
 
 const props = defineProps({
   wsUrl: {
@@ -8,38 +11,7 @@ const props = defineProps({
   },
 });
 
-const commands = ref([]);
-const connected = ref(false);
-let socket = null;
-
-function formatTime(isoTimestamp) {
-  return new Date(isoTimestamp).toLocaleTimeString();
-}
-
-onMounted(() => {
-  socket = new WebSocket(props.wsUrl);
-
-  socket.addEventListener("open", () => {
-    connected.value = true;
-  });
-
-  socket.addEventListener("close", () => {
-    connected.value = false;
-  });
-
-  socket.addEventListener("message", (event) => {
-    const data = JSON.parse(event.data);
-    commands.value.unshift(data);
-    // Keep the log from growing forever.
-    if (commands.value.length > 50) {
-      commands.value.pop();
-    }
-  });
-});
-
-onBeforeUnmount(() => {
-  socket?.close();
-});
+const { commands, connected } = useCommandLog(toRef(props, "wsUrl"));
 </script>
 
 <template>
@@ -52,7 +24,7 @@ onBeforeUnmount(() => {
     </h2>
     <ul>
       <li v-for="(entry, index) in commands" :key="index">
-        <span class="time">{{ formatTime(entry.timestamp) }}</span>
+        <span class="time">{{ formatCommandTime(entry.timestamp) }}</span>
         <span class="command">{{ entry.command }}</span>
         <span :class="['badge', entry.sent_to_xiao ? 'ok' : 'fail']">
           {{ entry.sent_to_xiao ? "sent to XIAO" : "not sent" }}
