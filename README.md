@@ -130,8 +130,30 @@ responsive regardless.
 
 ## Adding new gestures
 
-Open the printed local URL. You should see the webcam feed on the left and a
-"Commands Sent" log on the right.
+Open `python-client/main.py`. The part students edit is intentionally small:
+
+```py
+SEND_TO_XIAO = True  # change to False for Vue only
+
+def when_hand_seen(hand):
+    send_when(is_thumbs_up(hand), "thumbs_up")
+```
+
+Useful one-line blocks:
+
+- `send("hello")` - send a command now to the XIAO and Vue command log
+- `send_when(is_thumbs_up(hand), "thumbs_up")` - send when a gesture is seen
+- `message = receive()` - read the last command from Vue or the XIAO getter API
+
+Set `SEND_TO_XIAO = False` if the command should only go to the Vue website.
+Leave it as `True` if the command should go to both Vue and the Seeed Studio XIAO.
+
+Example:
+
+```py
+def when_hand_seen(hand):
+    send_when(count_extended_fingers(hand) == 5, "open_hand")
+```
 
 ## Troubleshooting
 
@@ -158,10 +180,24 @@ build - reinstall the pinned deps:
 ```sh
 pip install -r python-client/requirements.txt
 ```
-1. Write a detection function in `python-client/cv/gestures.py`
-2. Import it in `main.py`
-3. Add a check in the camera worker's `_run()` loop (follow the thumbs_up pattern)
-4. Handle the new command in `xiao/xiao.ino` (`handle_command()`)
 
-## Adding to the vue client
-learn JS and Vue. Use these [elements](https://element-plus.org/en-US/component/overview) to help things look good.
+## Adding to the Vue client
+
+Open `vue-client/src/App.vue`. This is the student website file.
+
+Useful values and one-line blocks:
+
+- `latestCommand?.command` - the newest message from Python
+- `sendToPython("hello")` - send a message back to Python for `receive()`
+- `connected` - whether the website is connected to Python
+- `videoFeedUrl` - the camera image URL if you want to show the webcam
+
+The setup line is already there:
+
+```vue
+<script setup>
+import { useHwLab } from "./useHwLab";
+
+const { connected, latestCommand, sendToPython, videoFeedUrl } = useHwLab();
+</script>
+```

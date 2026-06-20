@@ -26,8 +26,23 @@ const { commands, connected } = useCommandLog(toRef(props, "wsUrl"));
       <li v-for="(entry, index) in commands" :key="index">
         <span class="time">{{ formatCommandTime(entry.timestamp) }}</span>
         <span class="command">{{ entry.command }}</span>
-        <span :class="['badge', entry.sent_to_xiao ? 'ok' : 'fail']">
-          {{ entry.sent_to_xiao ? "sent to XIAO" : "not sent" }}
+        <span
+          :class="[
+            'badge',
+            entry.sent_to_xiao
+              ? 'ok'
+              : entry.send_to_xiao_enabled
+                ? 'fail'
+                : 'vue-only',
+          ]"
+        >
+          {{
+            entry.sent_to_xiao
+              ? "XIAO + Vue"
+              : entry.send_to_xiao_enabled
+                ? "XIAO failed"
+                : "Vue only"
+          }}
         </span>
       </li>
     </ul>
@@ -99,6 +114,11 @@ li {
 .badge.fail {
   background: #fff3cd;
   color: #856404;
+}
+
+.badge.vue-only {
+  background: #d9edf7;
+  color: #0c5460;
 }
 
 .empty {

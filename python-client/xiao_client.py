@@ -30,3 +30,18 @@ def get_status() -> dict | None:
     except requests.RequestException:
         pass
     return None
+
+
+def get_command() -> str | None:
+    """GET the last command remembered by the XIAO."""
+    url = f"http://{XIAO_IP}:{XIAO_PORT}/command"
+    try:
+        resp = requests.get(url, timeout=TIMEOUT_SECONDS)
+        if resp.ok:
+            data = resp.json()
+            command = data.get("command")
+            if command is not None:
+                return str(command)
+    except requests.RequestException:
+        pass
+    return None

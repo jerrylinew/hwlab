@@ -38,6 +38,15 @@ export function useCommandLog(wsUrl) {
     });
   }
 
+  function sendToPython(command) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return false;
+    }
+
+    socket.send(JSON.stringify({ command }));
+    return true;
+  }
+
   onMounted(() => {
     openSocket(wsUrl.value);
   });
@@ -51,5 +60,6 @@ export function useCommandLog(wsUrl) {
   return {
     commands,
     connected,
+    sendToPython,
   };
 }
