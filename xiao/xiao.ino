@@ -57,7 +57,9 @@ bool applyCommand(const String& command) {
   lastCommand = command;
   commandCount += 1;
 
-  if (command == "thumbs_up" || command == "toggle") {
+  if (command == "thumbs_up") {
+    setLed(false);
+  } else if (command == "toggle") {
     setLed(!ledOn);
   } else if (command == "true" || command == "on") {
     setLed(true);

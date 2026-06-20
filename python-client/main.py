@@ -19,7 +19,7 @@ set_send_to_xiao(SEND_TO_XIAO)
 def when_hand_seen(hand):
     """This runs every time the camera sees a hand."""
 
-    # Example: when you give a thumbs-up, send the "thumbs_up" command.
+    # Example: this turns off the XIAO built-in LED when you give a thumbs-up.
     send_when(is_thumbs_up(hand), "thumbs_up")
 
     # Try your own one-line blocks below:
