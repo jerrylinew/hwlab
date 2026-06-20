@@ -146,6 +146,10 @@ def create_app(
             media_type="multipart/x-mixed-replace; boundary=frame",
         )
 
+    @app.get("/debug/status")
+    def debug_status():
+        return commands.debug_status()
+
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
         await commands.websocket(websocket)

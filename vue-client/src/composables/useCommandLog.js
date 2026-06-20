@@ -38,13 +38,26 @@ export function useCommandLog(wsUrl) {
     });
   }
 
-  function sendToPython(command) {
+  function sendToPython(command, sendNow = false) {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return false;
     }
 
-    socket.send(JSON.stringify({ command }));
+    socket.send(JSON.stringify({ command, send_now: sendNow }));
     return true;
+  }
+
+  function addVueOnlyCommand(command) {
+    commands.value.unshift({
+      command,
+      sent_to_xiao: false,
+      send_to_xiao_enabled: false,
+      timestamp: new Date().toISOString(),
+      vue_only: true,
+    });
+    if (commands.value.length > MAX_COMMANDS) {
+      commands.value.pop();
+    }
   }
 
   onMounted(() => {
@@ -60,6 +73,7 @@ export function useCommandLog(wsUrl) {
   return {
     commands,
     connected,
+    addVueOnlyCommand,
     sendToPython,
   };
 }

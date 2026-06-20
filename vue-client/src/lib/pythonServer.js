@@ -2,6 +2,7 @@ export function createPythonServerUrls(pyServer) {
   const baseUrl = pyServer.replace(/\/$/, "");
 
   return {
+    debugStatusUrl: `${baseUrl}/debug/status`,
     videoFeedUrl: `${baseUrl}/video_feed`,
     wsUrl: `${baseUrl.replace(/^http/, "ws")}/ws`,
   };

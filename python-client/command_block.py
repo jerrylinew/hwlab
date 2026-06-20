@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
-from xiao_client import get_command, send_command
+from xiao_client import get_command, get_status, send_command
 
 COMMAND_COOLDOWN_SECONDS = 2.0
 GESTURE_CONFIRM_FRAMES = 3
@@ -44,6 +44,10 @@ class CommandBlock:
         self._last_received: str | None = None
         self._last_xiao_receive_check = 0.0
         self._last_xiao_command: str | None = None
+        self._send_attempts = 0
+        self._send_successes = 0
+        self._last_sent_command: str | None = None
+        self._last_sent_to_xiao = False
         self._lock = threading.Lock()
 
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
@@ -88,6 +92,24 @@ class CommandBlock:
         command = self._receive_from_xiao()
         return command if command is not None else default
 
+    def debug_status(self) -> dict:
+        """Return connection and command status for the Vue diagnostics panel."""
+        xiao_status = get_status() if SEND_TO_XIAO else None
+        with self._lock:
+            return {
+                "python_ok": True,
+                "send_to_xiao_enabled": SEND_TO_XIAO,
+                "vue_clients": len(self._clients),
+                "last_received_from_vue": self._last_received,
+                "last_received_from_xiao": self._last_xiao_command,
+                "last_sent_command": self._last_sent_command,
+                "last_sent_to_xiao": self._last_sent_to_xiao,
+                "send_attempts": self._send_attempts,
+                "send_successes": self._send_successes,
+                "xiao_connected": bool(xiao_status and xiao_status.get("ok")),
+                "xiao_status": xiao_status,
+            }
+
     async def websocket(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self._clients.add(websocket)
@@ -100,6 +122,11 @@ class CommandBlock:
     def _send_and_publish(self, command: str) -> None:
         send_to_xiao = SEND_TO_XIAO
         sent_ok = send_command(command) if send_to_xiao else False
+        with self._lock:
+            self._send_attempts += 1
+            self._send_successes += int(sent_ok)
+            self._last_sent_command = command
+            self._last_sent_to_xiao = sent_ok
         self._publish(command, sent_ok, send_to_xiao)
 
     def _receive_from_xiao(self) -> str | None:
@@ -137,14 +164,19 @@ class CommandBlock:
                     self._clients.discard(websocket)
 
     def _remember_received(self, message: str) -> None:
+        send_now = False
         try:
             data = json.loads(message)
             command = str(data.get("command", message))
+            send_now = bool(data.get("send_now", False))
         except json.JSONDecodeError:
             command = message
 
         with self._lock:
             self._last_received = command
+
+        if send_now:
+            self.send(command)
 
 
 commands = CommandBlock()
