@@ -10,6 +10,15 @@ from command_block import receive, send, send_when, set_send_to_xiao
 from cv import count_extended_fingers, is_thumbs_up
 from lab_server import create_app
 
+# ─── What Should The Camera Look For? ────────────────────────────────────────
+
+ENABLE_HAND_CV = True
+ENABLE_FACE_CV = True
+ENABLE_OBJECT_CV = False
+
+# Object CV uses MediaPipe Objectron. Supported models: "Cup", "Shoe", "Chair", "Camera".
+OBJECT_MODEL = "Cup"
+
 # True  = send commands to the Vue website and the Seeed Studio XIAO.
 # False = send commands only to the Vue website.
 SEND_TO_XIAO = True
@@ -28,4 +37,30 @@ def when_hand_seen(hand):
     # message_from_vue = receive()
 
 
-app = create_app(when_hand_seen)
+def when_face_seen(face):
+    """This runs every time the camera sees a face."""
+
+    # Face examples:
+    # send_when(face.mouth_open, "mouth_open")
+    # send_when(face.emotion == "happy", "happy")
+    # send_when(face.emotion == "surprised", "surprised")
+    pass
+
+
+def when_object_seen(thing):
+    """This runs when object CV sees the configured object model."""
+
+    # Object example:
+    # send_when(thing.label == "Cup", "cup_seen")
+    pass
+
+
+app = create_app(
+    on_hand_seen=when_hand_seen,
+    on_face_seen=when_face_seen,
+    on_object_seen=when_object_seen,
+    enable_hands=ENABLE_HAND_CV,
+    enable_faces=ENABLE_FACE_CV,
+    enable_objects=ENABLE_OBJECT_CV,
+    object_model=OBJECT_MODEL,
+)

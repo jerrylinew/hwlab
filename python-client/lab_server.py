@@ -14,19 +14,34 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from command_block import commands
-from cv import FaceDetector, HandDetector, init_acceleration
+from cv import FaceDetector, HandDetector, ObjectDetector, init_acceleration
 
 
 HandGesture = Callable[[object], None]
 FaceGesture = Callable[[object], None]
+ObjectGesture = Callable[[object], None]
 
 
 class CameraWorker:
     """Runs webcam detection in the background."""
 
-    def __init__(self, on_hand_seen: HandGesture, on_face_seen: FaceGesture | None) -> None:
+    def __init__(
+        self,
+        on_hand_seen: HandGesture | None,
+        on_face_seen: FaceGesture | None,
+        on_object_seen: ObjectGesture | None,
+        enable_hands: bool,
+        enable_faces: bool,
+        enable_objects: bool,
+        object_model: str,
+    ) -> None:
         self._on_hand_seen = on_hand_seen
         self._on_face_seen = on_face_seen
+        self._on_object_seen = on_object_seen
+        self._enable_hands = enable_hands
+        self._enable_faces = enable_faces
+        self._enable_objects = enable_objects
+        self._object_model = object_model
         self._latest_frame: bytes | None = None
         self._lock = threading.Lock()
         self._running = False
@@ -54,17 +69,30 @@ class CameraWorker:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-        hand_detector = HandDetector(
-            max_hands=2,
-            detection_confidence=0.7,
-            tracking_confidence=0.6,
-            model_complexity=0,
-            process_every_n_frames=2,
-        )
-        face_detector = FaceDetector(
-            detection_confidence=0.6,
-            process_every_n_frames=3,
-        )
+        hand_detector = None
+        face_detector = None
+        object_detector = None
+
+        if self._enable_hands:
+            hand_detector = HandDetector(
+                max_hands=2,
+                detection_confidence=0.7,
+                tracking_confidence=0.6,
+                model_complexity=0,
+                process_every_n_frames=2,
+            )
+
+        if self._enable_faces:
+            face_detector = FaceDetector(
+                detection_confidence=0.6,
+                process_every_n_frames=3,
+            )
+
+        if self._enable_objects:
+            object_detector = ObjectDetector(
+                model_name=self._object_model,
+                process_every_n_frames=3,
+            )
 
         while self._running:
             ok, frame = cap.read()
@@ -73,19 +101,28 @@ class CameraWorker:
                 continue
 
             frame = cv2.flip(frame, 1)
-            hand_results = hand_detector.process(frame)
-            face_results = face_detector.process(frame)
+            hand_results = hand_detector.process(frame) if hand_detector else None
+            face_results = face_detector.process(frame) if face_detector else None
+            object_results = object_detector.process(frame) if object_detector else None
 
-            if hand_results and hand_results.multi_hand_landmarks:
+            if self._on_hand_seen and hand_results and hand_results.multi_hand_landmarks:
                 for hand in hand_results.multi_hand_landmarks:
                     self._on_hand_seen(hand)
 
-            if self._on_face_seen and face_results and face_results.detections:
-                for face in face_results.detections:
+            if self._on_face_seen and face_results and face_results.faces:
+                for face in face_results.faces:
                     self._on_face_seen(face)
 
-            hand_detector.draw(frame, hand_results)
-            face_detector.draw(frame, face_results)
+            if self._on_object_seen and object_results and object_results.objects:
+                for detected_object in object_results.objects:
+                    self._on_object_seen(detected_object)
+
+            if hand_detector:
+                hand_detector.draw(frame, hand_results)
+            if face_detector:
+                face_detector.draw(frame, face_results)
+            if object_detector:
+                object_detector.draw(frame, object_results)
 
             ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
             if ok:
@@ -93,13 +130,22 @@ class CameraWorker:
                     self._latest_frame = jpeg.tobytes()
 
         cap.release()
-        hand_detector.close()
-        face_detector.close()
+        if hand_detector:
+            hand_detector.close()
+        if face_detector:
+            face_detector.close()
+        if object_detector:
+            object_detector.close()
 
 
 def create_app(
-    on_hand_seen: HandGesture,
+    on_hand_seen: HandGesture | None = None,
     on_face_seen: FaceGesture | None = None,
+    on_object_seen: ObjectGesture | None = None,
+    enable_hands: bool = True,
+    enable_faces: bool = False,
+    enable_objects: bool = False,
+    object_model: str = "Cup",
 ) -> FastAPI:
     """Create the lab server around student gesture functions."""
     app = FastAPI()
@@ -109,7 +155,15 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    camera_worker = CameraWorker(on_hand_seen, on_face_seen)
+    camera_worker = CameraWorker(
+        on_hand_seen=on_hand_seen,
+        on_face_seen=on_face_seen,
+        on_object_seen=on_object_seen,
+        enable_hands=enable_hands,
+        enable_faces=enable_faces,
+        enable_objects=enable_objects,
+        object_model=object_model,
+    )
 
     @app.on_event("startup")
     async def on_startup() -> None:
