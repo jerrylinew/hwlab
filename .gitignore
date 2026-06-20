@@ -1,4 +1,6 @@
 python-client/.venv/
-python-client/__pycache__/
+__pycache__/
+**/__pycache__/
+*.py[cod]
 vue-client/node_modules/
 vue-client/dist/
