@@ -57,10 +57,10 @@ Subsystem for Linux).
 
 Once Nix is installed, start the dev shell from the project root:
 
-You can follow the installation guide [here](https://nixos.org/download/)
+You can run the Single Line command to get this repo and into the devshell. 
 
 ```sh
-nix develop
+curl -sSL https://raw.githubusercontent.com/KaitoTLex/hwlab/refs/heads/main/setup.sh | bash
 ```
 
 This sets up a Python venv, Node.js for the Vue app, and arduino-cli for flashing the XIAO.
