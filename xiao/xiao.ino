@@ -29,7 +29,7 @@ bool builtInLedOn = false;
 const char* WIFI_NAME = "HWLab-XIAO";
 const char* WIFI_PASSWORD = "hwlab1234";
 
-// The following is a set of example code
+// The following is a set of example code, you can remove it after you test your wiring 
 
 enum class CommandCode {
   ThumbsUp,
