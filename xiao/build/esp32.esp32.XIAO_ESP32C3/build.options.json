@@ -1,0 +1,9 @@
+{
+  "additionalFiles": "../../..,../../..,../../..,../../..",
+  "compiler.optimization_flags": "-Os",
+  "customBuildProperties": "",
+  "fqbn": "esp32:esp32:XIAO_ESP32C3:UploadSpeed=115200,FlashMode=dio,FlashFreq=40",
+  "hardwareFolders": "/home/kaitotlex/.arduino15/packages/esp32/hardware/esp32/3.3.10,/home/kaitotlex/.arduino15/packages/esp32/hardware/esp32/3.3.10",
+  "otherLibrariesFolders": "/home/kaitotlex/Arduino/libraries",
+  "sketchLocation": "/home/kaitotlex/Source/Playground/hwlab/xiao"
+}

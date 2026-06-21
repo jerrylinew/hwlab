@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
-from xiao_client import get_command, get_status, send_command
+from xiao_client import get_command, get_debug_info, get_status, send_command
 
 COMMAND_COOLDOWN_SECONDS = 2.0
 GESTURE_CONFIRM_FRAMES = 3
@@ -95,6 +95,7 @@ class CommandBlock:
     def debug_status(self) -> dict:
         """Return connection and command status for the Vue diagnostics panel."""
         xiao_status = get_status() if SEND_TO_XIAO else None
+        xiao_transport = get_debug_info()
         with self._lock:
             return {
                 "python_ok": True,
@@ -108,6 +109,7 @@ class CommandBlock:
                 "send_successes": self._send_successes,
                 "xiao_connected": bool(xiao_status and xiao_status.get("ok")),
                 "xiao_status": xiao_status,
+                "xiao_transport": xiao_transport,
             }
 
     async def websocket(self, websocket: WebSocket) -> None:

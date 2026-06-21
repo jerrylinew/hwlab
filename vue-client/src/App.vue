@@ -102,19 +102,60 @@ function sendManualToVue() {
     </div>
 
     <section class="panel diagnostics-panel">
-      <h2>Debug Status</h2>
-      <button type="button" @click="refreshDiagnostics">Refresh</button>
-      <div class="diagnostics-grid">
-        <p>Python: <strong>{{ diagnostics?.python_ok ? "connected" : "not connected" }}</strong></p>
-        <p>Vue WebSocket: <strong>{{ connected ? "connected" : "not connected" }}</strong></p>
-        <p>Vue clients: <strong>{{ diagnostics?.vue_clients ?? 0 }}</strong></p>
-        <p>XIAO sending: <strong>{{ diagnostics?.send_to_xiao_enabled ? "on" : "off" }}</strong></p>
-        <p>XIAO status: <strong>{{ diagnostics?.xiao_connected ? "connected" : "not connected" }}</strong></p>
-        <p>Last sent: <strong>{{ diagnostics?.last_sent_command ?? "none" }}</strong></p>
-        <p>Last XIAO result: <strong>{{ diagnostics?.last_sent_to_xiao ? "success" : "no success yet" }}</strong></p>
-        <p>XIAO color: <strong>{{ diagnostics?.xiao_status?.rgb_color ?? "unknown" }}</strong></p>
-        <p>Attempts: <strong>{{ diagnostics?.send_attempts ?? 0 }}</strong></p>
+      <div class="debug-header">
+        <div>
+          <h2>Debug Status</h2>
+          <p>Live pipeline health for Vue, Python, and the XIAO.</p>
+        </div>
+        <button type="button" @click="refreshDiagnostics">Refresh</button>
       </div>
+
+      <div class="diagnostics-grid">
+        <article :class="['debug-card', diagnostics?.python_ok ? 'good' : 'bad']">
+          <span class="debug-dot"></span>
+          <h3>Python API</h3>
+          <strong>{{ diagnostics?.python_ok ? "Connected" : "Not connected" }}</strong>
+        </article>
+
+        <article :class="['debug-card', connected ? 'good' : 'warn']">
+          <span class="debug-dot"></span>
+          <h3>Vue WebSocket</h3>
+          <strong>{{ connected ? "Connected" : "Disconnected" }}</strong>
+          <small>{{ diagnostics?.vue_clients ?? 0 }} Vue client(s)</small>
+        </article>
+
+        <article :class="['debug-card', diagnostics?.xiao_connected ? 'good' : 'bad']">
+          <span class="debug-dot"></span>
+          <h3>XIAO</h3>
+          <strong>{{ diagnostics?.xiao_connected ? "Connected" : "Not connected" }}</strong>
+          <small>{{ diagnostics?.xiao_transport?.last_transport ?? "no transport yet" }}</small>
+        </article>
+
+        <article class="debug-card">
+          <span class="debug-dot neutral"></span>
+          <h3>Transport</h3>
+          <strong>{{ diagnostics?.xiao_transport?.configured_transport ?? "auto" }}</strong>
+          <small>{{ diagnostics?.xiao_transport?.serial_port ?? diagnostics?.xiao_transport?.http_url ?? "unknown" }}</small>
+        </article>
+
+        <article class="debug-card">
+          <span class="debug-dot neutral"></span>
+          <h3>Last Command</h3>
+          <strong>{{ diagnostics?.last_sent_command ?? "none" }}</strong>
+          <small>{{ diagnostics?.last_sent_to_xiao ? "XIAO received it" : "not confirmed by XIAO" }}</small>
+        </article>
+
+        <article class="debug-card color-card">
+          <span class="debug-dot neutral"></span>
+          <h3>RGB LED</h3>
+          <strong>{{ diagnostics?.xiao_status?.rgb_color ?? "unknown" }}</strong>
+          <small>{{ diagnostics?.xiao_status?.rgb_red ?? "?" }}, {{ diagnostics?.xiao_status?.rgb_green ?? "?" }}, {{ diagnostics?.xiao_status?.rgb_blue ?? "?" }}</small>
+        </article>
+      </div>
+
+      <p v-if="diagnostics?.xiao_transport?.last_error" class="debug-error">
+        {{ diagnostics.xiao_transport.last_error }}
+      </p>
     </section>
   </main>
 </template>
@@ -230,12 +271,74 @@ main {
 
 .diagnostics-panel {
   margin-top: 24px;
+  background: linear-gradient(135deg, #101828, #18243a);
+  color: #eef4ff;
+}
+
+.debug-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.debug-header h2,
+.debug-header p {
+  margin: 0 0 6px;
 }
 
 .diagnostics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 4px 18px;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.debug-card {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.debug-card h3,
+.debug-card strong,
+.debug-card small {
+  display: block;
+  margin: 4px 0;
+}
+
+.debug-card small {
+  color: #b8c7e6;
+  overflow-wrap: anywhere;
+}
+
+.debug-dot {
+  background: #f59e0b;
+  border-radius: 50%;
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+}
+
+.debug-card.good .debug-dot {
+  background: #22c55e;
+}
+
+.debug-card.bad .debug-dot {
+  background: #ef4444;
+}
+
+.debug-dot.neutral {
+  background: #60a5fa;
+}
+
+.debug-error {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 10px;
+  margin-top: 14px;
+  padding: 10px;
 }
 
 @media (max-width: 740px) {

@@ -48,12 +48,12 @@
                   ]
                   ++ pkgs.lib.optionals isLinux [
                     pkgs.libxcb
-                    pkgs.xorg.libX11
-                    pkgs.xorg.libXau
-                    pkgs.xorg.libXdmcp
-                    pkgs.xorg.libXext
-                    pkgs.xorg.libSM
-                    pkgs.xorg.libICE
+                    pkgs.libx11
+                    pkgs.libxau
+                    pkgs.libxdmcp
+                    pkgs.libxext
+                    pkgs.libsm
+                    pkgs.libice
                     pkgs.ocl-icd
                   ]
                 )
