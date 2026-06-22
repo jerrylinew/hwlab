@@ -20,11 +20,14 @@ After it finishes, open a **new** terminal so the `nix` command is on your PATH.
 > [nixos.org](https://nixos.org/download), flakes are not on by default. Enable
 > them by adding this line to `~/.config/nix/nix.conf` (create the file if it
 > doesn't exist):
+> ```
+> vi ~/.config/nix/nix.conf
+> ```
 >
 > ```
 > experimental-features = nix-command flakes
 > ```
-
+> then press `:wq` to save.
 ### Windows
 
 Nix does not run natively on Windows — install it inside **WSL2** (Windows
