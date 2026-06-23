@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="KaitoTLex/hwlab"
+REPO="jerrylinew/hwlab"
 TAG="prod"
 
 echo "==> Fetching latest source tarball URL from GitHub release '${TAG}'..."
