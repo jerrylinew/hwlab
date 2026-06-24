@@ -2,7 +2,10 @@
 
 import os
 
-os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
+# "0" tells OpenCV's AVFoundation backend to *request* camera access, which
+# pops the native macOS permission dialog on first use. Setting this to "1"
+# would skip the request and silently fail until access is granted manually.
+os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "0")
 
 from .acceleration import init_acceleration
 from .face_detector import FaceDetector, FaceInfo

@@ -37,283 +37,172 @@ Here's the whole pipeline in one line:
 
 > **webcam → OpenCV → MediaPipe detection → your gesture rule → command → (Vue website + XIAO)**
 
-#### Section: Install Nix
+#### Section: Download the Project
 
-This project uses **Nix** to install everything it needs — Python, Node.js, and
-all the libraries — with one command, so everyone in the workshop gets an
-identical setup. You only install Nix once per computer.
+You don't need to install Python, Node, or any code editor first — the lab
+installs everything it needs the first time you start it. You just need the
+project files.
 
-**On Mac or Linux**, run this in a terminal, then open a *new* terminal window
-when it finishes:
+1. On the project's GitHub page, click the green **Code** button, then
+   **Download ZIP**.
+2. Find the downloaded `hwlab.zip` (usually in your **Downloads** folder) and
+   **unzip** it — double-click on Mac, or right-click → **Extract All** on
+   Windows.
+3. You now have a folder called `hwlab` with everything inside.
 
-```sh
-curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
-```
+That's it — no terminal yet.
 
-**On Windows**, Nix can't run directly — you install it inside WSL2 (a Linux
-environment inside Windows). In PowerShell **as Administrator**:
+#### Section: Start the Lab
 
-```powershell
-wsl --install
-```
+Inside the `hwlab` folder there are two launchers. Use the one for your computer:
 
-Reboot if asked, open the new **Ubuntu** app, then run the same Mac/Linux
-command above *inside* that Ubuntu terminal.
+- **Mac:** double-click **`Start HW Lab.command`**.
+- **Windows:** double-click **`Start HW Lab.bat`**.
 
-Confirm it worked:
+The **first time**, a black window opens and spends a few minutes installing
+Python, the camera libraries, and everything else automatically. When it's
+ready, your web browser opens to the lab at **http://localhost:8000**, showing
+your webcam with detection drawn on top. Later starts take only a few seconds.
 
-```sh
-nix --version
-```
+A couple of one-time prompts to expect:
 
-#### Section: Enter the Dev Shell
+- **"Allow camera access?"** — click **Allow**, or the feed stays black.
+- A security warning the very first time you open the launcher: on **Mac**,
+  right-click the file → **Open** → **Open**; on **Windows**, click
+  **More info** → **Run anyway**.
 
-From the project's top folder, run:
-
-```sh
-nix develop
-```
-
-The first time, this takes a few minutes. It:
-
-1. Downloads Python 3.11 and Node.js 22.
-2. Creates a Python virtual environment in `python-client/.venv`.
-3. Installs OpenCV, MediaPipe, FastAPI, and the rest of the Python libraries.
-
-When it's done you'll see a prompt change and a "HW Lab dev shell ready"
-message. **Every terminal you use for this lab should start with `nix develop`** —
-it's what puts `python`, `uvicorn`, and `npm` on your path.
+**Leave the black window open while you work.** It *is* the lab — closing it (or
+pressing **Ctrl-C** inside it) stops everything.
 
 #### Section: Check Your Understanding
 
 ```quiz
 type: mc
-question: What is the main reason this project uses Nix?
-- It makes the webcam run faster
-- *It gives everyone an identical setup with all dependencies in one command
-- It is required by MediaPipe
-- It replaces the Vue website
+question: Before starting the lab the first time, what do you need to install yourself?
+- Python, Node, and a code editor
+- *Nothing — the launcher installs everything automatically
+- Only a web browser plugin
+- A virtual machine
 ```
 
 ```quiz
 type: mc
-question: You're on Windows. Where do you install and run Nix?
-- Directly in PowerShell
-- *Inside WSL2 (the Ubuntu Linux environment)
-- In the Vue website
-- You can't use this project on Windows at all
+question: After the lab starts, where do you see your webcam feed?
+- In the black launcher window
+- *In your web browser, at http://localhost:8000
+- In a separate camera app you install
+- You have to start a second program for the website
+```
+
+```quiz
+type: mc
+question: What happens if you close the black launcher window while working?
+- Nothing, it keeps running in the background
+- *It stops the lab — leave it open while you work
+- It saves your code
+- It restarts your computer
 ```
 
 ## Unit: Run the Lab
 
-### Lesson: Meet the Terminal
+### Lesson: The Launcher Window
 
-#### Section: What Is the Terminal?
+#### Section: What the Black Window Is
 
-You already used the **terminal** in Unit 1 to install Nix — now let's actually
-learn it, because the rest of this lab lives here.
+When you double-clicked the launcher, a plain black window opened with scrolling
+text. That window is a **terminal** — the place where the lab program runs and
+prints what it's doing. You mostly **don't type anything in it**; the launcher
+already ran the right commands for you.
 
-The terminal is just a way to tell your computer what to do by **typing**
-instead of clicking. You type one line, press **Enter**, and the computer runs
-it. That's the whole idea.
+You only need to know two things about it:
 
-- **On Mac:** open the **Terminal** app (press ⌘-Space, type "Terminal", Enter).
-- **On Windows:** open the **Ubuntu** app you installed in Unit 1 — that's your
-  terminal.
+- **Leave it open while you work.** That window *is* the running lab. The camera,
+  the detection, and the web page all come from the program inside it. If you
+  close it, the lab stops.
+- **To stop the lab,** click the window and press **Ctrl-C**, or just close it.
 
-You'll see a **prompt** — a line ending in `$` waiting for you to type:
-
-```text
-yourname@laptop ~ %
-```
-
-Every command has the same shape: a **command name**, sometimes followed by
-**arguments**. For example, in `cd python-client`, the command is `cd` and the
-argument is `python-client`. Spelling, spaces, and capitalization all matter —
-the terminal is picky.
-
-#### Section: Finding Your Way — `pwd`, `ls`, `cd`
-
-Think of the terminal as standing inside one folder at a time. Three commands let
-you look around and move:
-
-```sh
-pwd        # "print working directory" — which folder am I in right now?
-ls         # "list" — what files and folders are in here?
-cd NAME    # "change directory" — step INTO the folder called NAME
-```
-
-Two special moves with `cd`:
-
-```sh
-cd ..      # go UP one folder (to the parent)
-cd ~       # jump to your home folder, from anywhere
-```
-
-Try it now. Navigate to the project folder and look inside — you should see the
-two halves of the lab:
-
-```sh
-cd ~/hwlab     # or wherever you downloaded the project
-ls
-```
-
-```text
-README.md   python-client   vue-client
-```
-
-If `ls` shows `python-client` and `vue-client`, you're in the right place. If you
-ever feel lost, type `pwd` to see exactly where you are.
-
-#### Section: Three Shortcuts That Save You
-
-These three habits will save you the most typing and the most frustration:
-
-- **Tab to autocomplete.** Type `cd pyth` then press **Tab** — the terminal fills
-  in `python-client/` for you. This avoids typos and is faster.
-- **Up arrow for history.** Press **↑** to bring back the last command you ran, so
-  you can re-run or edit it instead of retyping.
-- **Ctrl-C to stop.** Some commands (like the servers you'll start next) keep
-  running on purpose and "take over" the terminal. Press **Ctrl-C** to stop them
-  and get your prompt back.
-
-You don't need to memorize these — just know they exist and reach for them.
+That's the whole job of the black window: stay open while you use the lab, and
+close when you're done.
 
 #### Section: Check Your Understanding
 
 ```quiz
 type: mc
-question: You're not sure which folder the terminal is currently "in." Which command tells you?
-- ls
-- *pwd
-- cd ..
-- nix develop
+question: What is the black window that opens when you start the lab?
+- A virus warning you should close immediately
+- *A terminal where the lab program runs — leave it open while you work
+- The web page you customize
+- A place you must type commands to start the camera
 ```
 
 ```quiz
 type: mc
-question: `ls` shows a folder called `python-client`. How do you step into it?
-- pwd python-client
-- *cd python-client
-- ls python-client
-- cd ..
+question: How do you stop the lab?
+- Restart your computer
+- *Press Ctrl-C in the black window, or close it
+- Refresh the web page
+- Unplug the webcam
 ```
 
-```quiz
-type: mc
-question: You started a server and now the terminal won't accept new commands — it's "stuck" running the program. What gets your prompt back?
-- Pressing Enter a few times
-- Closing the laptop lid
-- *Pressing Ctrl-C to stop the running program
-- Typing pwd
-```
-
-### Lesson: Two Terminals, Two Halves
-
-#### Section: Start the Python Brain
-
-Open a terminal, enter the dev shell, then start the Python server:
-
-```sh
-nix develop
-cd python-client
-uvicorn main:app --reload
-```
-
-`uvicorn` is the web server that runs `main.py`. The `--reload` flag restarts it
-automatically whenever you save a change — handy once you start editing.
-
-When it's running you'll see `Application startup complete` and a line saying
-it's listening on `http://127.0.0.1:8000`. Behind the scenes the camera has
-opened and detection is already running.
-
-This server is **data only** — there's no UI here. If you open
-`http://localhost:8000/` in a browser you'll get a small page reminding you to
-open the Vue website instead. The real endpoints are `/video_feed` and `/ws`.
-
-#### Section: Start the Vue Website
-
-Leave the Python server running. Open a **second** terminal:
-
-```sh
-nix develop
-cd vue-client
-npm install
-npm run dev
-```
-
-`npm install` downloads the web libraries (first time only). `npm run dev`
-starts the viewer and prints a local URL — usually:
-
-```text
-http://localhost:5173
-```
-
-Open that URL in your browser. The website already knows where the Python
-server is — it defaults to `http://localhost:8000`. (You can override that by
-setting `VITE_PY_SERVER` in a `vue-client/.env` file, but you won't need to.)
+### Lesson: Your Lab in the Browser
 
 #### Section: What Success Looks Like
 
-The default page is titled **"My HW Lab Website"** — a page you'll customize
-later. It has three parts:
+When the lab is running, your browser shows the page at
+**http://localhost:8000**, titled **"OpenCV Gesture & Face Lab."** It has:
 
-- **Message From Python:** a big line that starts as *"No message yet."*
-- **Send A Message To Python:** a button that sends `hello_from_vue` back to the
-  Python side.
-- **Show Camera Feed:** click to expand your live camera image. Raise a hand and
-  a skeleton of dots and lines snaps onto it; look at the camera and a box
-  appears around your face.
+- **Webcam Feed** (left): your live camera image. Raise a hand and a skeleton of
+  dots and lines snaps onto it; look at the camera and a box appears around your
+  face.
+- **Commands Sent** (right): a log of commands, with **"Latest from Python"**
+  starting at *none*.
+- **Debug Status** (bottom): live health for Python, the web page, and the XIAO.
 
-Now **give the camera a thumbs-up.** The "Message From Python" line should flip
-to **`thumbs_up`**. The thumbs-up gesture is already wired up for you — in the
-next units you'll understand how that wiring works, then add your own gestures.
+Now **give the camera a thumbs-up.** "Latest from Python" should flip to
+**`thumbs_up`** and a new row appears in the command log. The thumbs-up gesture
+is already wired up for you — in the next units you'll understand how that wiring
+works, then add your own gestures.
 
-If nothing happens, expand the camera feed first and confirm the hand skeleton
-appears — detection has to see your hand before a gesture can fire.
+If nothing happens, check that the hand skeleton appears on the feed first —
+detection has to see your hand before a gesture can fire.
 
 #### Section: When Things Break
 
 A few problems are common on the first run:
 
-**macOS: "not authorized to capture video" / the feed is black.**
-macOS needs to grant your terminal camera access. Go to **System Settings →
-Privacy & Security → Camera**, enable your terminal app (Terminal, iTerm, VS
-Code…), then fully quit and reopen it and run `uvicorn` again.
+**The camera feed is black.**
+Your computer needs permission to use the webcam.
+- *Mac:* a permission dialog should pop up the first time — click **Allow**. If
+  you dismissed it, go to **System Settings → Privacy & Security → Camera**,
+  enable your launcher, then start the lab again.
+- *Windows:* close any app already using the camera (Zoom, Teams, the Camera
+  app), and check **Settings → Privacy & security → Camera** allows desktop apps
+  to use the camera. Then restart the lab.
+
+**The browser didn't open by itself.**
+Open it yourself and go to **http://localhost:8000**.
 
 **`AttributeError: module 'mediapipe' has no attribute 'solutions'`.**
-Your MediaPipe is too new — this lab uses the `mp.solutions` API, which newer
-wheels dropped on Apple Silicon. `requirements.txt` pins a working version;
-reinstall it:
-
-```sh
-pip install -r python-client/requirements.txt
-```
-
-**`npm install` fails with a dependency conflict.**
-Make sure you pulled the latest project files — the Vue dependencies are pinned
-to versions that work together.
-
-**Browser shows `{"detail":"Not Found"}`.**
-You opened the Python server (`:8000`) instead of the Vue website (`:5173`).
+A rare library mismatch. Stop the lab, then in the `python-client` folder run
+`uv sync` to restore the pinned versions, and start the lab again.
 
 #### Section: Check Your Understanding
 
 ```quiz
 type: mc
-question: You give a thumbs-up and "Message From Python" changes to `thumbs_up`. What does that confirm?
+question: You give a thumbs-up and "Latest from Python" changes to `thumbs_up`. What does that confirm?
 - Only that the camera turned on
-- *The whole pipeline works — detection saw your hand, the gesture fired, and the command reached the website
+- *The whole pipeline works — detection saw your hand, the gesture fired, and the command reached the web page
 - That you still need to wire up the gesture yourself
 - That the XIAO is connected
 ```
 
 ```quiz
 type: mc
-question: Which URL should you open in your browser to use the lab?
-- http://localhost:8000
-- http://127.0.0.1:8000/video_feed
-- *http://localhost:5173
+question: Which URL shows your lab in the browser?
+- http://localhost:5173
+- *http://localhost:8000
+- http://localhost:8000/video_feed
 - http://localhost:8000/ws
 ```
 

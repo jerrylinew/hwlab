@@ -1,6 +1,12 @@
 python-client/.venv/
+python-client/.uv/
+.venv/
 __pycache__/
 **/__pycache__/
 *.py[cod]
 vue-client/node_modules/
-vue-client/dist/
+.DS_Store
+**/.DS_Store
+
+# Note: vue-client/dist/ is intentionally committed. We ship the prebuilt web
+# app so students run only the Python server (one process, no Node needed).

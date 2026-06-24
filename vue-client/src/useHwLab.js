@@ -3,7 +3,10 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useCommandLog } from "./composables/useCommandLog";
 import { createPythonServerUrls } from "./lib/pythonServer";
 
-export function useHwLab(pyServer = import.meta.env.VITE_PY_SERVER ?? "http://localhost:8000") {
+// By default the Vue app and the Python server share an origin (the Python
+// server serves this built app). VITE_PY_SERVER only needs to be set when
+// running the Vite dev server separately (see .env.development).
+export function useHwLab(pyServer = import.meta.env.VITE_PY_SERVER ?? window.location.origin) {
   const urls = createPythonServerUrls(pyServer);
   const wsUrl = computed(() => urls.wsUrl);
   const { commands, connected, addVueOnlyCommand, sendToPython } = useCommandLog(wsUrl);

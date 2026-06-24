@@ -2,16 +2,22 @@
 
 import asyncio
 import os
+import sys
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
-os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
+# "0" tells OpenCV's AVFoundation backend to *request* camera access, which
+# pops the native macOS permission dialog on first use. Setting this to "1"
+# would skip the request and silently fail until access is granted manually.
+os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "0")
 
 import cv2
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from command_block import commands
 from cv import FaceDetector, HandDetector, ObjectDetector, init_acceleration
@@ -20,6 +26,49 @@ from cv import FaceDetector, HandDetector, ObjectDetector, init_acceleration
 HandGesture = Callable[[object], None]
 FaceGesture = Callable[[object], None]
 ObjectGesture = Callable[[object], None]
+
+# The prebuilt Vue web app. We serve it from this same server so students only
+# ever start one thing. Built with `npm run build` in vue-client/.
+WEB_DIST_DIR = Path(__file__).resolve().parent.parent / "vue-client" / "dist"
+
+
+def _is_wsl() -> bool:
+    """True when running inside Windows Subsystem for Linux."""
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return True
+    try:
+        with open("/proc/version", encoding="utf-8") as version_file:
+            return "microsoft" in version_file.read().lower()
+    except OSError:
+        return False
+
+
+def _camera_help_message() -> str:
+    """Platform-specific guidance shown when the webcam can't be opened."""
+    if _is_wsl():
+        return (
+            "[cv] No camera found. You're running inside WSL, which does not "
+            "share the Windows webcam with Linux (there is no /dev/video0). "
+            "Run the Python client on native Windows instead: install Python "
+            "for Windows, then start uvicorn from PowerShell/CMD (not WSL)."
+        )
+    if sys.platform == "darwin":
+        return (
+            "[cv] Could not open the camera. On macOS, allow camera access for "
+            "your terminal in System Settings -> Privacy & Security -> Camera, "
+            "then restart the server."
+        )
+    if sys.platform == "win32":
+        return (
+            "[cv] Could not open the camera. Make sure a webcam is connected and "
+            "not in use by another app (Zoom, Teams, the Camera app), then "
+            "restart the server. Check Settings -> Privacy & security -> Camera "
+            "and allow desktop apps to access the camera."
+        )
+    return (
+        "[cv] Could not open the camera. Make sure a webcam is connected, not "
+        "in use by another app, and that this user can access /dev/video0."
+    )
 
 
 class CameraWorker:
@@ -62,10 +111,38 @@ class CameraWorker:
         with self._lock:
             return self._latest_frame
 
+    def _open_camera(self) -> "cv2.VideoCapture | None":
+        """Open the webcam, waiting through the macOS permission prompt.
+
+        With OPENCV_AVFOUNDATION_SKIP_AUTH=0, the first open blocks on the
+        native permission dialog. Retrying lets the feed connect as soon as
+        access is granted, without restarting the server.
+        """
+        for attempt in range(10):
+            if not self._running:
+                return None
+            # DirectShow opens faster and more reliably than the default MSMF
+            # backend on Windows; other platforms use the default backend.
+            if sys.platform == "win32":
+                cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            else:
+                cap = cv2.VideoCapture(0)
+            if cap.isOpened():
+                return cap
+            cap.release()
+            if attempt == 0:
+                print("[cv] Waiting for camera (allow access if your OS prompts)...")
+            time.sleep(1.0)
+        return None
+
     def _run(self) -> None:
         print(f"[cv] Hardware acceleration: {init_acceleration()}")
 
-        cap = cv2.VideoCapture(0)
+        cap = self._open_camera()
+        if cap is None:
+            print(_camera_help_message())
+            self._running = False
+            return
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
@@ -174,25 +251,6 @@ def create_app(
     async def on_shutdown() -> None:
         camera_worker.stop()
 
-    @app.get("/", response_class=HTMLResponse)
-    def index():
-        return """
-        <html>
-          <body style="font-family: sans-serif; max-width: 640px; margin: 40px auto;">
-            <h1>OpenCV Gesture &amp; Face Lab - Python server</h1>
-            <p>This server is running correctly. It only provides data, not the UI.</p>
-            <p><strong>Open the Vue viewer instead</strong> (run <code>npm run dev</code>
-               in <code>vue-client</code>, then open the URL it prints, usually
-               <a href="http://localhost:5173">http://localhost:5173</a>).</p>
-            <p>Endpoints served here:</p>
-            <ul>
-              <li><a href="/video_feed">/video_feed</a> - live annotated webcam stream</li>
-              <li><code>/ws</code> - WebSocket of commands sent to the XIAO</li>
-            </ul>
-          </body>
-        </html>
-        """
-
     @app.get("/video_feed")
     def video_feed():
         return StreamingResponse(
@@ -207,6 +265,23 @@ def create_app(
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
         await commands.websocket(websocket)
+
+    # Serve the prebuilt Vue web app from this same server, so the whole lab is
+    # one process on one port. Mounted last so the API routes above win. If the
+    # app hasn't been built yet, show a short hint instead.
+    if (WEB_DIST_DIR / "index.html").exists():
+        app.mount("/", StaticFiles(directory=WEB_DIST_DIR, html=True), name="web")
+    else:
+
+        @app.get("/", response_class=HTMLResponse)
+        def index_not_built():
+            return (
+                "<html><body style='font-family: sans-serif; max-width: 640px; "
+                "margin: 40px auto;'><h1>OpenCV Gesture &amp; Face Lab</h1>"
+                "<p>The web app hasn't been built yet. Run "
+                "<code>npm install &amp;&amp; npm run build</code> in "
+                "<code>vue-client</code>, then restart this server.</p></body></html>"
+            )
 
     return app
 
