@@ -17,8 +17,14 @@ IDE installed. The launcher sets everything up for you the first time.
    ready, your browser opens to **http://localhost:8000** with the live camera
    feed and command log. Later runs start in seconds.
 
-Leave the little black window open while you work. Close it (or press
-**Ctrl-C**) to stop the lab.
+Leave the little black window open while you work — it *is* the running lab.
+
+**To stop the lab (and turn the camera off):**
+- **Mac:** double-click **`Stop HW Lab.command`**, or
+- **Windows:** double-click **`Stop HW Lab.bat`**.
+
+You can also press **Ctrl-C** in the black window, or close it. Any of these
+shuts the server down and releases the webcam, so the camera light turns off.
 
 > **First-run security prompt:** macOS ("cannot verify the developer") — right-click
 > the file → **Open** → **Open**. Windows ("Windows protected your PC") — click

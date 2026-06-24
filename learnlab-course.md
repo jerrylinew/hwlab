@@ -117,12 +117,13 @@ already ran the right commands for you.
 You only need to know two things about it:
 
 - **Leave it open while you work.** That window *is* the running lab. The camera,
-  the detection, and the web page all come from the program inside it. If you
-  close it, the lab stops.
-- **To stop the lab,** click the window and press **Ctrl-C**, or just close it.
+  the detection, and the web page all come from the program inside it.
+- **To stop the lab, double-click the Stop launcher** (`Stop HW Lab.command` on
+  Mac, `Stop HW Lab.bat` on Windows). This shuts the lab down and **turns the
+  camera off** — you'll see the camera light go dark. (Pressing **Ctrl-C** in the
+  black window or closing it does the same thing.)
 
-That's the whole job of the black window: stay open while you use the lab, and
-close when you're done.
+Stopping the lab is how you turn the webcam off when you're done.
 
 #### Section: Check Your Understanding
 
@@ -137,9 +138,9 @@ question: What is the black window that opens when you start the lab?
 
 ```quiz
 type: mc
-question: How do you stop the lab?
+question: How do you stop the lab and turn the camera off?
 - Restart your computer
-- *Press Ctrl-C in the black window, or close it
+- *Double-click the Stop launcher (or press Ctrl-C in the black window)
 - Refresh the web page
 - Unplug the webcam
 ```

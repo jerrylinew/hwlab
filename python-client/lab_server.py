@@ -156,6 +156,11 @@ class CameraWorker:
     def stop(self) -> None:
         self._running = False
         commands.stop()
+        # Wait for the loop to exit so cap.release() actually runs and the
+        # camera (and its indicator light) turns off before the process ends.
+        thread = self._thread
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=3.0)
 
     def get_frame(self) -> bytes | None:
         with self._lock:
