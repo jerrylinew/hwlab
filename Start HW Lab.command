@@ -35,4 +35,6 @@ echo "Leave this window open while you work. Close it (or press Ctrl-C) to stop.
 echo ""
 
 # uv reads pyproject.toml, sets up Python + libraries on first run, then runs.
-uv run uvicorn main:app --reload --port 8000
+# --timeout-graceful-shutdown keeps saves snappy: the live video stream never
+# ends on its own, so without this the auto-reload would wait on it for ages.
+uv run uvicorn main:app --reload --port 8000 --timeout-graceful-shutdown 2

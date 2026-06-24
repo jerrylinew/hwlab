@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 import { useHwLab } from "./useHwLab";
 import { formatCommandTime } from "./lib/pythonServer";
@@ -17,6 +17,25 @@ const {
 } = useHwLab();
 
 const manualCommand = ref("thumbs_up");
+
+// A banner describing what the camera/detection is doing, so a slow first-run
+// model download or a setup failure is visible instead of a frozen feed.
+const labStatus = computed(() => {
+  const d = diagnostics.value;
+  if (!d) {
+    return null;
+  }
+  if (d.camera_error) {
+    return { kind: "error", text: d.camera_error };
+  }
+  if (d.camera_status === "starting") {
+    return {
+      kind: "info",
+      text: "Starting the camera and detection... the first run can download a model, which may take up to a minute.",
+    };
+  }
+  return null;
+});
 
 function sendManualToPython() {
   const command = manualCommand.value.trim();
@@ -37,11 +56,15 @@ function sendManualToVue() {
   <main>
     <h1>OpenCV Gesture &amp; Face Lab</h1>
     <p>
-      Camera feed on the left, command log on the right. Use the manual sender
-      to test commands without making a gesture.
+      Webcam and command log on the left; edit your gesture code on the right.
     </p>
 
-    <div class="layout">
+    <p v-if="labStatus" :class="['lab-status', labStatus.kind]">
+      {{ labStatus.text }}
+    </p>
+
+    <div class="workspace">
+     <div class="col-left">
       <section class="panel video-panel">
         <h2>Webcam Feed</h2>
         <img :src="videoFeedUrl" alt="Live webcam feed from Python" />
@@ -100,9 +123,12 @@ function sendManualToVue() {
           No commands yet - try a thumbs-up or send one manually.
         </p>
       </section>
-    </div>
+     </div>
 
-    <CodeEditor :runtime-error="diagnostics?.user_code_error ?? null" />
+     <div class="col-right">
+       <CodeEditor :runtime-error="diagnostics?.user_code_error ?? null" />
+     </div>
+    </div>
 
     <section class="panel diagnostics-panel">
       <div class="debug-header">
@@ -166,15 +192,50 @@ function sendManualToVue() {
 <style scoped>
 main {
   font-family: sans-serif;
-  max-width: 1100px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 24px;
 }
 
-.layout {
-  display: flex;
+.lab-status {
+  border-radius: 8px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+}
+
+.lab-status.info {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.lab-status.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Left half: video on top, commands below. Right half: the code editor, full
+   height alongside the left column. */
+.workspace {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
-  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.col-left {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.col-right {
+  display: flex;
+  min-width: 0;
+}
+
+.col-right > * {
+  flex: 1;
 }
 
 .panel {
@@ -184,19 +245,23 @@ main {
   background: #fff;
 }
 
-.video-panel,
 .log-panel {
   flex: 1;
-  min-width: 320px;
 }
 
 .video-panel img {
   display: block;
   width: 100%;
-  max-width: 640px;
+  max-width: 100%;
   border: 2px solid #333;
   border-radius: 8px;
   background: #000;
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
 }
 
 .status-pill,

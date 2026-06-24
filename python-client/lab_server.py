@@ -54,6 +54,12 @@ def _is_same_origin(request: Request) -> bool:
     return origin.split("://", 1)[-1] == request.headers.get("host", "")
 
 
+def _short_exc() -> str:
+    """A one-line description of the exception currently being handled."""
+    exc_type, exc, _ = sys.exc_info()
+    return f"{exc_type.__name__}: {exc}"
+
+
 def _format_user_error() -> str:
     """Turn the live exception into a short, student-friendly message.
 
@@ -134,6 +140,11 @@ class CameraWorker:
         # Last error raised by the student's gesture functions, if any. Captured
         # so a typo doesn't kill detection and can be shown back in the editor.
         self._user_error: str | None = None
+        # Lifecycle of the camera/detection thread, surfaced to the web UI so a
+        # slow first-run model download or a setup failure is visible, not a
+        # silent freeze. One of: starting, running, no_camera, error.
+        self._status = "starting"
+        self._camera_error: str | None = None
 
     def start(self) -> None:
         if self._running:
@@ -150,9 +161,18 @@ class CameraWorker:
         with self._lock:
             return self._latest_frame
 
-    def get_user_error(self) -> str | None:
+    def get_health(self) -> dict:
         with self._lock:
-            return self._user_error
+            return {
+                "camera_status": self._status,
+                "camera_error": self._camera_error,
+                "user_code_error": self._user_error,
+            }
+
+    def _set_status(self, status: str, error: str | None = None) -> None:
+        with self._lock:
+            self._status = status
+            self._camera_error = error
 
     def _run_callback(self, callback: Callable[[object], None], arg: object) -> None:
         """Call a student gesture function, capturing any error it raises.
@@ -200,7 +220,9 @@ class CameraWorker:
 
         cap = self._open_camera()
         if cap is None:
-            print(_camera_help_message())
+            message = _camera_help_message()
+            print(message)
+            self._set_status("no_camera", message)
             self._running = False
             return
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -210,26 +232,38 @@ class CameraWorker:
         face_detector = None
         object_detector = None
 
-        if self._enable_hands:
-            hand_detector = HandDetector(
-                max_hands=2,
-                detection_confidence=0.7,
-                tracking_confidence=0.6,
-                model_complexity=0,
-                process_every_n_frames=2,
-            )
+        # Building the detectors can be slow or fail - object detection downloads
+        # a model on first use. Report the outcome instead of dying silently.
+        try:
+            if self._enable_hands:
+                hand_detector = HandDetector(
+                    max_hands=2,
+                    detection_confidence=0.7,
+                    tracking_confidence=0.6,
+                    model_complexity=0,
+                    process_every_n_frames=2,
+                )
 
-        if self._enable_faces:
-            face_detector = FaceDetector(
-                detection_confidence=0.6,
-                process_every_n_frames=3,
-            )
+            if self._enable_faces:
+                face_detector = FaceDetector(
+                    detection_confidence=0.6,
+                    process_every_n_frames=3,
+                )
 
-        if self._enable_objects:
-            object_detector = ObjectDetector(
-                model_name=self._object_model,
-                process_every_n_frames=3,
-            )
+            if self._enable_objects:
+                object_detector = ObjectDetector(
+                    model_name=self._object_model,
+                    process_every_n_frames=3,
+                )
+        except Exception:
+            message = f"Detection failed to start: {_short_exc()}"
+            print(f"[cv] {message}")
+            self._set_status("error", message)
+            cap.release()
+            self._running = False
+            return
+
+        self._set_status("running")
 
         while self._running:
             ok, frame = cap.read()
@@ -237,34 +271,42 @@ class CameraWorker:
                 time.sleep(0.05)
                 continue
 
-            frame = cv2.flip(frame, 1)
-            hand_results = hand_detector.process(frame) if hand_detector else None
-            face_results = face_detector.process(frame) if face_detector else None
-            object_results = object_detector.process(frame) if object_detector else None
+            try:
+                frame = cv2.flip(frame, 1)
+                hand_results = hand_detector.process(frame) if hand_detector else None
+                face_results = face_detector.process(frame) if face_detector else None
+                object_results = object_detector.process(frame) if object_detector else None
 
-            if self._on_hand_seen and hand_results and hand_results.multi_hand_landmarks:
-                for hand in hand_results.multi_hand_landmarks:
-                    self._run_callback(self._on_hand_seen, hand)
+                if self._on_hand_seen and hand_results and hand_results.multi_hand_landmarks:
+                    for hand in hand_results.multi_hand_landmarks:
+                        self._run_callback(self._on_hand_seen, hand)
 
-            if self._on_face_seen and face_results and face_results.faces:
-                for face in face_results.faces:
-                    self._run_callback(self._on_face_seen, face)
+                if self._on_face_seen and face_results and face_results.faces:
+                    for face in face_results.faces:
+                        self._run_callback(self._on_face_seen, face)
 
-            if self._on_object_seen and object_results and object_results.objects:
-                for detected_object in object_results.objects:
-                    self._run_callback(self._on_object_seen, detected_object)
+                if self._on_object_seen and object_results and object_results.objects:
+                    for detected_object in object_results.objects:
+                        self._run_callback(self._on_object_seen, detected_object)
 
-            if hand_detector:
-                hand_detector.draw(frame, hand_results)
-            if face_detector:
-                face_detector.draw(frame, face_results)
-            if object_detector:
-                object_detector.draw(frame, object_results)
+                if hand_detector:
+                    hand_detector.draw(frame, hand_results)
+                if face_detector:
+                    face_detector.draw(frame, face_results)
+                if object_detector:
+                    object_detector.draw(frame, object_results)
 
-            ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            if ok:
-                with self._lock:
-                    self._latest_frame = jpeg.tobytes()
+                ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                if ok:
+                    with self._lock:
+                        self._latest_frame = jpeg.tobytes()
+            except Exception:
+                # A detector blowing up mid-stream shouldn't freeze the feed for
+                # good; record it and keep trying.
+                message = f"Detection error: {_short_exc()}"
+                print(f"[cv] {message}")
+                self._set_status("error", message)
+                time.sleep(0.1)
 
         cap.release()
         if hand_detector:
@@ -321,9 +363,10 @@ def create_app(
     @app.get("/debug/status")
     def debug_status():
         status = commands.debug_status()
-        # Surface the latest error from the student's gesture code so the editor
-        # can show it.
-        status["user_code_error"] = camera_worker.get_user_error()
+        # Surface camera/detection health and the latest student-code error so
+        # the web UI can show what's happening (e.g. a slow model download or a
+        # detector that failed to start) instead of a silent freeze.
+        status.update(camera_worker.get_health())
         return status
 
     @app.get("/api/code")

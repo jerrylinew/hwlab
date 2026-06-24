@@ -27,4 +27,6 @@ REM poll instead of guessing a fixed delay.
 start "" /b powershell -ExecutionPolicy Bypass -Command "$ErrorActionPreference='SilentlyContinue'; for($i=0;$i -lt 600;$i++){ try{ $c=New-Object Net.Sockets.TcpClient; $c.Connect('localhost',8000); $c.Close(); Start-Process 'http://localhost:8000'; break } catch { Start-Sleep -Seconds 1 } }"
 
 REM uv reads pyproject.toml, sets up Python + libraries on first run, then runs.
-uv run uvicorn main:app --reload --port 8000
+REM --timeout-graceful-shutdown keeps saves snappy: the live video stream never
+REM ends on its own, so without this the auto-reload would wait on it for ages.
+uv run uvicorn main:app --reload --port 8000 --timeout-graceful-shutdown 2

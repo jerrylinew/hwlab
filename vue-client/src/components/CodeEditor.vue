@@ -50,11 +50,18 @@ async function save() {
   saveResult.value = null;
   const code = view.value.state.doc.toString();
 
+  // Never let the button hang on "Saving...": if the response doesn't come back
+  // promptly (the server writes the file then restarts), give up waiting and
+  // treat it as saved + restarting.
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 12000);
+
   try {
     const response = await fetch(CODE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code }),
+      signal: controller.signal,
     });
     const result = await response.json();
     if (result.ok) {
@@ -70,9 +77,11 @@ async function save() {
     }
   } catch (error) {
     // The server writes the file then auto-reloads, which can drop this request
-    // mid-flight. A network error here almost always means "saved, restarting."
+    // mid-flight (or trip the timeout above). That almost always means the save
+    // landed and the lab is restarting.
     saveResult.value = { kind: "ok", text: "Saved! The lab is restarting with your changes..." };
   } finally {
+    window.clearTimeout(timer);
     saving.value = false;
   }
 }
@@ -124,7 +133,9 @@ onBeforeUnmount(() => view.value?.destroy());
 
 <style scoped>
 .editor-panel {
-  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 
 .editor-header {
@@ -163,12 +174,14 @@ onBeforeUnmount(() => view.value?.destroy());
   border: 1px solid #ddd;
   border-radius: 8px;
   margin-top: 12px;
-  max-height: 460px;
+  flex: 1;
+  min-height: 360px;
   overflow: auto;
 }
 
 .editor-host :deep(.cm-editor) {
   font-size: 14px;
+  height: 100%;
 }
 
 .editor-host :deep(.cm-focused) {
