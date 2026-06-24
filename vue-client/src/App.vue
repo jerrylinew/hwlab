@@ -3,6 +3,7 @@ import { ref } from "vue";
 
 import { useHwLab } from "./useHwLab";
 import { formatCommandTime } from "./lib/pythonServer";
+import CodeEditor from "./components/CodeEditor.vue";
 
 const {
   addVueOnlyCommand,
@@ -100,6 +101,8 @@ function sendManualToVue() {
         </p>
       </section>
     </div>
+
+    <CodeEditor :runtime-error="diagnostics?.user_code_error ?? null" />
 
     <section class="panel diagnostics-panel">
       <div class="debug-header">

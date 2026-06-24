@@ -351,7 +351,12 @@ question: Why measure distance-to-the-wrist instead of just comparing y values t
 
 #### Section: Your One Job — `when_hand_seen`
 
-Open `main.py`. It's short — almost all of it is the one function you edit:
+You edit your code **right on the lab page** — scroll down to the **Edit Your
+Gestures** panel. That panel *is* `main.py`, the one file you change. There's no
+separate code editor to install. When you click **Save & Run**, the lab checks
+your code for typos, saves it, and restarts itself with your changes.
+
+`main.py` is short — almost all of it is the one function you edit:
 
 ```python
 from command_block import receive, send, send_when, set_send_to_xiao
@@ -399,8 +404,10 @@ GESTURE_CONFIRM_FRAMES = 3
 
 #### Section: Make Your First Tweak
 
-Edit `main.py` to feel the loop. Because you started `uvicorn` with `--reload`,
-the server restarts itself every time you save.
+In the **Edit Your Gestures** panel, make a small change and click **Save & Run**
+to feel the loop — the lab restarts itself with your new code each time you save.
+(If you make a typo, Save & Run won't break the lab; it tells you which line to
+fix.)
 
 - Change the command string to `send_when(is_thumbs_up(hand), "yes")`. Save, then
   thumbs-up: the message now reads `yes`.

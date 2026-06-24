@@ -46,7 +46,11 @@ You only ever edit one file: **`python-client/main.py`**.
 
 ## Adding your own gestures
 
-Open `python-client/main.py`. The part you edit is intentionally small:
+Edit your code right on the lab page in the **Edit Your Gestures** panel — no
+separate editor needed. It loads `python-client/main.py`; click **Save & Run**
+and the lab compile-checks it (a typo won't crash anything — it points at the bad
+line), saves, and restarts with your change. The part you edit is intentionally
+small:
 
 ```py
 SEND_TO_XIAO = True  # change to False for web-page only

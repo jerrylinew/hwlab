@@ -6,26 +6,43 @@ export function useCommandLog(wsUrl) {
   const commands = ref([]);
   const connected = ref(false);
   let socket = null;
+  let reconnectTimer = null;
+  let closing = false;
 
   function closeSocket() {
+    closing = true;
+    window.clearTimeout(reconnectTimer);
     socket?.close();
     socket = null;
     connected.value = false;
   }
 
   function openSocket(url) {
-    closeSocket();
-    socket = new WebSocket(url);
+    closing = false;
+    window.clearTimeout(reconnectTimer);
+    socket?.close();
+    const ws = new WebSocket(url);
+    socket = ws;
 
-    socket.addEventListener("open", () => {
-      connected.value = true;
+    ws.addEventListener("open", () => {
+      if (socket === ws) {
+        connected.value = true;
+      }
     });
 
-    socket.addEventListener("close", () => {
+    ws.addEventListener("close", () => {
+      if (socket !== ws) {
+        return; // superseded by a newer socket; ignore
+      }
       connected.value = false;
+      // The server briefly restarts whenever main.py is saved. Reconnect so the
+      // command log returns on its own instead of going dead until a refresh.
+      if (!closing) {
+        reconnectTimer = window.setTimeout(() => openSocket(url), 1500);
+      }
     });
 
-    socket.addEventListener("message", (event) => {
+    ws.addEventListener("message", (event) => {
       try {
         const data = JSON.parse(event.data);
         commands.value.unshift(data);

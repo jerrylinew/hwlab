@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import time
+import traceback
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,10 +15,11 @@ from pathlib import Path
 os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "0")
 
 import cv2
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from command_block import commands
 from cv import FaceDetector, HandDetector, ObjectDetector, init_acceleration
@@ -30,6 +32,40 @@ ObjectGesture = Callable[[object], None]
 # The prebuilt Vue web app. We serve it from this same server so students only
 # ever start one thing. Built with `npm run build` in vue-client/.
 WEB_DIST_DIR = Path(__file__).resolve().parent.parent / "vue-client" / "dist"
+
+# The one file students edit. The in-browser editor reads and writes it here.
+MAIN_PY = Path(__file__).resolve().parent / "main.py"
+
+
+class CodeUpdate(BaseModel):
+    code: str
+
+
+def _is_same_origin(request: Request) -> bool:
+    """Allow same-origin browser requests and local tools; block other sites.
+
+    Saving code writes a file that runs on this machine, so we don't want a page
+    on some other website POSTing to it. Same-origin browser requests carry an
+    Origin whose host matches ours; curl and the like send no Origin at all.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    return origin.split("://", 1)[-1] == request.headers.get("host", "")
+
+
+def _format_user_error() -> str:
+    """Turn the live exception into a short, student-friendly message.
+
+    Picks out the line number inside main.py so the editor can point at it.
+    """
+    exc_type, exc, tb = sys.exc_info()
+    line = None
+    for frame in traceback.extract_tb(tb):
+        if Path(frame.filename).name == "main.py":
+            line = frame.lineno
+    where = f"line {line}: " if line else ""
+    return f"{where}{exc_type.__name__}: {exc}"
 
 
 def _is_wsl() -> bool:
@@ -95,6 +131,9 @@ class CameraWorker:
         self._lock = threading.Lock()
         self._running = False
         self._thread: threading.Thread | None = None
+        # Last error raised by the student's gesture functions, if any. Captured
+        # so a typo doesn't kill detection and can be shown back in the editor.
+        self._user_error: str | None = None
 
     def start(self) -> None:
         if self._running:
@@ -110,6 +149,27 @@ class CameraWorker:
     def get_frame(self) -> bytes | None:
         with self._lock:
             return self._latest_frame
+
+    def get_user_error(self) -> str | None:
+        with self._lock:
+            return self._user_error
+
+    def _run_callback(self, callback: Callable[[object], None], arg: object) -> None:
+        """Call a student gesture function, capturing any error it raises.
+
+        Without this, an exception in the student's code would kill the camera
+        thread and freeze the feed. Instead we record it and keep running.
+        """
+        try:
+            callback(arg)
+        except Exception:
+            message = _format_user_error()
+            with self._lock:
+                self._user_error = message
+            print(f"[user code] {message}")
+            return
+        with self._lock:
+            self._user_error = None
 
     def _open_camera(self) -> "cv2.VideoCapture | None":
         """Open the webcam, waiting through the macOS permission prompt.
@@ -184,15 +244,15 @@ class CameraWorker:
 
             if self._on_hand_seen and hand_results and hand_results.multi_hand_landmarks:
                 for hand in hand_results.multi_hand_landmarks:
-                    self._on_hand_seen(hand)
+                    self._run_callback(self._on_hand_seen, hand)
 
             if self._on_face_seen and face_results and face_results.faces:
                 for face in face_results.faces:
-                    self._on_face_seen(face)
+                    self._run_callback(self._on_face_seen, face)
 
             if self._on_object_seen and object_results and object_results.objects:
                 for detected_object in object_results.objects:
-                    self._on_object_seen(detected_object)
+                    self._run_callback(self._on_object_seen, detected_object)
 
             if hand_detector:
                 hand_detector.draw(frame, hand_results)
@@ -260,7 +320,43 @@ def create_app(
 
     @app.get("/debug/status")
     def debug_status():
-        return commands.debug_status()
+        status = commands.debug_status()
+        # Surface the latest error from the student's gesture code so the editor
+        # can show it.
+        status["user_code_error"] = camera_worker.get_user_error()
+        return status
+
+    @app.get("/api/code")
+    def get_code():
+        """Return the contents of main.py for the in-browser editor."""
+        return {"code": MAIN_PY.read_text(encoding="utf-8")}
+
+    @app.post("/api/code")
+    def save_code(update: CodeUpdate, request: Request):
+        """Save edited main.py, but only if it compiles.
+
+        Compile-checking first means a syntax error never reaches the file, so
+        the auto-reload can't crash on broken code and the editor stays
+        reachable. Cross-origin writes are refused so a random web page can't
+        overwrite the file while the lab is running.
+        """
+        if not _is_same_origin(request):
+            return {"ok": False, "error": "Refused: cross-origin write."}
+
+        try:
+            compile(update.code, "main.py", "exec")
+        except SyntaxError as error:
+            return {
+                "ok": False,
+                "error": error.msg,
+                "line": error.lineno,
+            }
+
+        # Write atomically so the auto-reloader never sees a half-written file.
+        tmp = MAIN_PY.with_suffix(".py.tmp")
+        tmp.write_text(update.code, encoding="utf-8")
+        os.replace(tmp, MAIN_PY)
+        return {"ok": True}
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
