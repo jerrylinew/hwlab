@@ -224,6 +224,34 @@ The project keeps the messy plumbing out of your way. A background thread
 5. **Draw** the landmarks and face boxes onto the frame.
 6. **Encode** the frame as a JPEG so it can be streamed to the browser.
 
+**A closer look at step 3 — the computer vision.** "Run detection" is where the
+real CV happens, and everything you build sits on top of it, so it's worth
+understanding. **MediaPipe** is a library from Google that runs small,
+pre-trained machine-learning models on each frame — entirely **on your laptop**,
+in real time, with no cloud and no internet round-trip. For this lab it runs two
+separate pipelines:
+
+- **Hands.** First a *palm detector* scans the whole frame and finds *where* any
+  hands are. Then, for each hand it found, a second *landmark model* zooms into
+  that region and pinpoints 21 specific points — fingertips, knuckles, the wrist
+  (the next section is all about these). It also labels each hand **Left** or
+  **Right**.
+- **Face.** A face detector returns a bounding box, plus a few key points like
+  the eyes and nose, for every face in view.
+
+A few things that explain the behavior you'll see:
+
+- It works **frame by frame** — each frame is analyzed on its own. Once
+  MediaPipe has locked onto a hand, it *tracks* that hand into the next frame
+  instead of re-scanning from scratch. That's cheaper, and it's why the
+  landmarks glide smoothly as you move rather than flickering.
+- Every detection comes with a **confidence score**, and low-confidence ones are
+  thrown out. So a blurry, fast-moving, or half-out-of-frame hand may simply not
+  register — hold it flat and well-lit and it snaps right back.
+- By step 4 the hard ML work is already done. All you receive is the clean
+  result: a list of hands, each carrying its 21 landmarks. Your job is just to
+  read those numbers and decide whether a gesture happened.
+
 You never touch steps 1–3, 5, or 6. You just fill in step 4: given one `hand`,
 decide whether a gesture happened and send a command. When you *do* send one, it's
 broadcast to the website over the `/ws` WebSocket as a small JSON message (and,

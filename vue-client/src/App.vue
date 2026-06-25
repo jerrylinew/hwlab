@@ -6,7 +6,6 @@ import { formatCommandTime } from "./lib/pythonServer";
 import CodeEditor from "./components/CodeEditor.vue";
 
 const {
-  addVueOnlyCommand,
   commands,
   connected,
   diagnostics,
@@ -17,6 +16,9 @@ const {
 } = useHwLab();
 
 const manualCommand = ref("thumbs_up");
+
+// Debug Status panel is hidden for now — flip to true to bring it back.
+const showDebug = ref(false);
 
 // A banner describing what the camera/detection is doing, so a slow first-run
 // model download or a setup failure is visible instead of a frozen feed.
@@ -44,18 +46,15 @@ function sendManualToPython() {
   }
 }
 
-function sendManualToVue() {
-  const command = manualCommand.value.trim();
-  if (command) {
-    addVueOnlyCommand(command);
-  }
+function clearHistory() {
+  commands.value = [];
 }
 </script>
 
 <template>
   <main>
     <h1>OpenCV Gesture &amp; Face Lab</h1>
-    <p>
+    <p class="subtitle">
       Webcam and command log on the left; edit your gesture code on the right.
     </p>
 
@@ -64,7 +63,6 @@ function sendManualToVue() {
     </p>
 
     <div class="workspace">
-     <div class="col-left">
       <section class="panel video-panel">
         <h2>Webcam Feed</h2>
         <img :src="videoFeedUrl" alt="Live webcam feed from Python" />
@@ -85,8 +83,8 @@ function sendManualToVue() {
             placeholder="thumbs_up"
             aria-label="Command to send"
           />
-          <button type="submit">Send through Python</button>
-          <button type="button" @click="sendManualToVue">Vue only</button>
+          <button type="submit">Send</button>
+          <button type="button" @click="clearHistory">Clear history</button>
         </form>
 
         <p class="latest">
@@ -123,14 +121,13 @@ function sendManualToVue() {
           No commands yet - try a thumbs-up or send one manually.
         </p>
       </section>
-     </div>
 
-     <div class="col-right">
-       <CodeEditor :runtime-error="diagnostics?.user_code_error ?? null" />
-     </div>
+      <div class="col-right">
+        <CodeEditor :runtime-error="diagnostics?.user_code_error ?? null" />
+      </div>
     </div>
 
-    <section class="panel diagnostics-panel">
+    <section v-if="showDebug" class="panel diagnostics-panel">
       <div class="debug-header">
         <div>
           <h2>Debug Status</h2>
@@ -189,18 +186,45 @@ function sendManualToVue() {
   </main>
 </template>
 
+<style>
+/* Global reset so the app sits edge-to-edge with no default body margin. */
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+}
+</style>
+
 <style scoped>
+/* Full-screen app: fill the viewport, no centered max-width, no page scroll.
+   The header is fixed at the top; the workspace below fills the rest and each
+   column manages its own scrolling. */
 main {
   font-family: sans-serif;
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 24px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+main > h1 {
+  margin: 0 0 2px;
+  font-size: 1.3rem;
+}
+
+.subtitle {
+  margin: 0 0 12px;
+  color: #555;
 }
 
 .lab-status {
   border-radius: 8px;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   padding: 10px 12px;
+  flex-shrink: 0;
 }
 
 .lab-status.info {
@@ -213,29 +237,26 @@ main {
   color: #721c24;
 }
 
-/* Left half: video on top, commands below. Right half: the code editor, full
-   height alongside the left column. */
+/* Three horizontal columns filling the viewport height: webcam (¼) and commands
+   (¼) on the left, the code editor (½) on the right. min-height:0 lets each
+   column shrink so its children can scroll instead of overflowing. */
 .workspace {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  align-items: stretch;
-}
-
-.col-left {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  min-width: 0;
+  grid-template-columns: 3fr 2fr 5fr;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
 }
 
 .col-right {
   display: flex;
   min-width: 0;
+  min-height: 0;
 }
 
 .col-right > * {
   flex: 1;
+  min-height: 0;
 }
 
 .panel {
@@ -243,22 +264,57 @@ main {
   border-radius: 10px;
   padding: 18px;
   background: #fff;
+  box-sizing: border-box;
 }
 
+/* Each side column fills the full workspace height and manages its own
+   overflow; min-width:0 lets the quarter-width columns shrink cleanly. */
+.video-panel,
 .log-panel {
-  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
+/* Hug the feed's natural height instead of stretching to full column height —
+   stretching is what forced the letterbox black bars above/below the image. */
+.video-panel {
+  align-self: start;
+}
+
+.video-panel h2,
+.log-panel h2 {
+  flex-shrink: 0;
+}
+
+/* Fill the panel's remaining height and letterbox (contain) so the feed is
+   never cropped and never overflows its half. */
+/* width:100% + height:auto sizes the image to the feed's own aspect ratio, so
+   there are no black letterbox bars. */
 .video-panel img {
   display: block;
   width: 100%;
-  max-width: 100%;
+  height: auto;
   border: 2px solid #333;
   border-radius: 8px;
   background: #000;
 }
 
+/* The command list takes the leftover space under the form and scrolls. */
+.command-list {
+  flex: 1;
+  min-height: 0;
+}
+
 @media (max-width: 900px) {
+  /* On narrow screens, stack the three columns and let the page scroll normally
+     instead of trapping content inside a fixed-height viewport. */
+  main {
+    height: auto;
+    overflow: visible;
+  }
+
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -309,9 +365,9 @@ main {
 
 .command-list {
   list-style: none;
-  max-height: 420px;
   overflow-y: auto;
   padding: 0;
+  margin: 0;
 }
 
 .command-list li {
