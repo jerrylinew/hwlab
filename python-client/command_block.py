@@ -22,7 +22,7 @@ from xiao_client import get_command, get_debug_info, get_status, send_command
 COMMAND_COOLDOWN_SECONDS = 2.0
 GESTURE_CONFIRM_FRAMES = 3
 RECEIVE_COOLDOWN_SECONDS = 0.5
-SEND_TO_XIAO = True
+SEND_TO_XIAO = False
 
 
 def set_send_to_xiao(enabled: bool) -> None:

@@ -1,0 +1,19 @@
+[project]
+name = "hwlab-python-client"
+version = "0.1.0"
+description = "OpenCV gesture and face lab - Python server (camera + MediaPipe + FastAPI)"
+# Pinned to 3.11: the mediapipe 0.10.14 wheels this lab needs ship for 3.11.
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    # Core CV. Headless is fine: we stream MJPEG, we never open a GUI window.
+    "opencv-python-headless",
+    # Pinned: newer mediapipe wheels (0.10.30+) drop the legacy `mp.solutions`
+    # API on macOS arm64, which this lab uses for hand/face detection.
+    "mediapipe==0.10.14",
+    "fastapi",
+    "uvicorn[standard]",
+    "websockets",
+    # XIAO HTTP/USB client (used later in the workshop).
+    "requests",
+    "pyserial",
+]

@@ -2,16 +2,24 @@
 
 import asyncio
 import os
+import sys
 import threading
 import time
+import traceback
 from collections.abc import Callable
+from pathlib import Path
 
-os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
+# "0" tells OpenCV's AVFoundation backend to *request* camera access, which
+# pops the native macOS permission dialog on first use. Setting this to "1"
+# would skip the request and silently fail until access is granted manually.
+os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "0")
 
 import cv2
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from command_block import commands
 from cv import FaceDetector, HandDetector, ObjectDetector, init_acceleration
@@ -20,6 +28,112 @@ from cv import FaceDetector, HandDetector, ObjectDetector, init_acceleration
 HandGesture = Callable[[object], None]
 FaceGesture = Callable[[object], None]
 ObjectGesture = Callable[[object], None]
+
+# The prebuilt Vue web app. We serve it from this same server so students only
+# ever start one thing. Built with `npm run build` in vue-client/.
+WEB_DIST_DIR = Path(__file__).resolve().parent.parent / "vue-client" / "dist"
+
+# The one file students edit. The in-browser editor reads and writes it here.
+PYTHON_DIR = Path(__file__).resolve().parent
+MAIN_PY = PYTHON_DIR / "main.py"
+
+# Files the in-browser editor can open. Only main.py is editable; the rest are
+# read-only so students can preview the lab plumbing the curriculum references
+# without being able to break it. The keys are the only paths the read endpoint
+# will serve, so there's no way to read arbitrary files off disk.
+PREVIEW_FILES = {
+    "main.py": MAIN_PY,
+    "cv/gestures.py": PYTHON_DIR / "cv" / "gestures.py",
+    "command_block.py": PYTHON_DIR / "command_block.py",
+    "lab_server.py": PYTHON_DIR / "lab_server.py",
+    "xiao_client.py": PYTHON_DIR / "xiao_client.py",
+}
+
+# Of the previewable files, the ones students may actually edit and save. The
+# rest stay read-only so the editor can't overwrite the lab plumbing. main.py
+# holds the gesture wiring; cv/gestures.py holds the gesture-detection rules.
+EDITABLE_FILES = {"main.py", "cv/gestures.py"}
+
+
+class CodeUpdate(BaseModel):
+    code: str
+    name: str = "main.py"
+
+
+def _is_same_origin(request: Request) -> bool:
+    """Allow same-origin browser requests and local tools; block other sites.
+
+    Saving code writes a file that runs on this machine, so we don't want a page
+    on some other website POSTing to it. Same-origin browser requests carry an
+    Origin whose host matches ours; curl and the like send no Origin at all.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    return origin.split("://", 1)[-1] == request.headers.get("host", "")
+
+
+def _short_exc() -> str:
+    """A one-line description of the exception currently being handled."""
+    exc_type, exc, _ = sys.exc_info()
+    return f"{exc_type.__name__}: {exc}"
+
+
+def _format_user_error() -> str:
+    """Turn the live exception into a short, student-friendly message.
+
+    Picks out the line number inside an editable file (main.py or
+    cv/gestures.py) so the editor can point at it.
+    """
+    exc_type, exc, tb = sys.exc_info()
+    editable_basenames = {Path(p).name for p in EDITABLE_FILES}
+    line = None
+    file_name = None
+    for frame in traceback.extract_tb(tb):
+        if Path(frame.filename).name in editable_basenames:
+            line = frame.lineno
+            file_name = Path(frame.filename).name
+    where = f"{file_name} line {line}: " if line else ""
+    return f"{where}{exc_type.__name__}: {exc}"
+
+
+def _is_wsl() -> bool:
+    """True when running inside Windows Subsystem for Linux."""
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return True
+    try:
+        with open("/proc/version", encoding="utf-8") as version_file:
+            return "microsoft" in version_file.read().lower()
+    except OSError:
+        return False
+
+
+def _camera_help_message() -> str:
+    """Platform-specific guidance shown when the webcam can't be opened."""
+    if _is_wsl():
+        return (
+            "[cv] No camera found. You're running inside WSL, which does not "
+            "share the Windows webcam with Linux (there is no /dev/video0). "
+            "Run the Python client on native Windows instead: install Python "
+            "for Windows, then start uvicorn from PowerShell/CMD (not WSL)."
+        )
+    if sys.platform == "darwin":
+        return (
+            "[cv] Could not open the camera. On macOS, allow camera access for "
+            "your terminal in System Settings -> Privacy & Security -> Camera, "
+            "then restart the server."
+        )
+    if sys.platform == "win32":
+        return (
+            "[cv] Could not open the camera. Make sure a webcam is connected and "
+            "not in use by another app (Zoom, Teams, the Camera app), then "
+            "restart the server. Check Settings -> Privacy & security -> Camera "
+            "and allow desktop apps to access the camera."
+        )
+    return (
+        "[cv] Could not open the camera. Make sure a webcam is connected, not "
+        "in use by another app, and that this user can access /dev/video0."
+    )
 
 
 class CameraWorker:
@@ -46,6 +160,14 @@ class CameraWorker:
         self._lock = threading.Lock()
         self._running = False
         self._thread: threading.Thread | None = None
+        # Last error raised by the student's gesture functions, if any. Captured
+        # so a typo doesn't kill detection and can be shown back in the editor.
+        self._user_error: str | None = None
+        # Lifecycle of the camera/detection thread, surfaced to the web UI so a
+        # slow first-run model download or a setup failure is visible, not a
+        # silent freeze. One of: starting, running, no_camera, error.
+        self._status = "starting"
+        self._camera_error: str | None = None
 
     def start(self) -> None:
         if self._running:
@@ -57,15 +179,80 @@ class CameraWorker:
     def stop(self) -> None:
         self._running = False
         commands.stop()
+        # Wait for the loop to exit so cap.release() actually runs and the
+        # camera (and its indicator light) turns off before the process ends.
+        thread = self._thread
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=3.0)
 
     def get_frame(self) -> bytes | None:
         with self._lock:
             return self._latest_frame
 
+    def get_health(self) -> dict:
+        with self._lock:
+            return {
+                "camera_status": self._status,
+                "camera_error": self._camera_error,
+                "user_code_error": self._user_error,
+            }
+
+    def _set_status(self, status: str, error: str | None = None) -> None:
+        with self._lock:
+            self._status = status
+            self._camera_error = error
+
+    def _run_callback(self, callback: Callable[[object], None], arg: object) -> None:
+        """Call a student gesture function, capturing any error it raises.
+
+        Without this, an exception in the student's code would kill the camera
+        thread and freeze the feed. Instead we record it and keep running.
+        """
+        try:
+            callback(arg)
+        except Exception:
+            message = _format_user_error()
+            with self._lock:
+                self._user_error = message
+            print(f"[user code] {message}")
+            return
+        with self._lock:
+            self._user_error = None
+
+    def _open_camera(self) -> "cv2.VideoCapture | None":
+        """Open the webcam, waiting through the macOS permission prompt.
+
+        With OPENCV_AVFOUNDATION_SKIP_AUTH=0, the first open blocks on the
+        native permission dialog. Retrying lets the feed connect as soon as
+        access is granted, without restarting the server.
+        """
+        for attempt in range(10):
+            if not self._running:
+                return None
+            # DirectShow opens faster and more reliably than the default MSMF
+            # backend on Windows; other platforms use the default backend.
+            if sys.platform == "win32":
+                cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            else:
+                cap = cv2.VideoCapture(0)
+            if cap.isOpened():
+                return cap
+            cap.release()
+            if attempt == 0:
+                print("[cv] Waiting for camera (allow access if your OS prompts)...")
+            time.sleep(1.0)
+        return None
+
     def _run(self) -> None:
         print(f"[cv] Hardware acceleration: {init_acceleration()}")
 
-        cap = cv2.VideoCapture(0)
+        cap = self._open_camera()
+        if cap is None:
+            message = _camera_help_message()
+            print(message)
+            self._set_status("no_camera", message)
+            self._running = False
+            return
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
@@ -73,26 +260,38 @@ class CameraWorker:
         face_detector = None
         object_detector = None
 
-        if self._enable_hands:
-            hand_detector = HandDetector(
-                max_hands=2,
-                detection_confidence=0.7,
-                tracking_confidence=0.6,
-                model_complexity=0,
-                process_every_n_frames=2,
-            )
+        # Building the detectors can be slow or fail - object detection downloads
+        # a model on first use. Report the outcome instead of dying silently.
+        try:
+            if self._enable_hands:
+                hand_detector = HandDetector(
+                    max_hands=2,
+                    detection_confidence=0.7,
+                    tracking_confidence=0.6,
+                    model_complexity=0,
+                    process_every_n_frames=2,
+                )
 
-        if self._enable_faces:
-            face_detector = FaceDetector(
-                detection_confidence=0.6,
-                process_every_n_frames=3,
-            )
+            if self._enable_faces:
+                face_detector = FaceDetector(
+                    detection_confidence=0.6,
+                    process_every_n_frames=3,
+                )
 
-        if self._enable_objects:
-            object_detector = ObjectDetector(
-                model_name=self._object_model,
-                process_every_n_frames=3,
-            )
+            if self._enable_objects:
+                object_detector = ObjectDetector(
+                    model_name=self._object_model,
+                    process_every_n_frames=3,
+                )
+        except Exception:
+            message = f"Detection failed to start: {_short_exc()}"
+            print(f"[cv] {message}")
+            self._set_status("error", message)
+            cap.release()
+            self._running = False
+            return
+
+        self._set_status("running")
 
         while self._running:
             ok, frame = cap.read()
@@ -100,34 +299,42 @@ class CameraWorker:
                 time.sleep(0.05)
                 continue
 
-            frame = cv2.flip(frame, 1)
-            hand_results = hand_detector.process(frame) if hand_detector else None
-            face_results = face_detector.process(frame) if face_detector else None
-            object_results = object_detector.process(frame) if object_detector else None
+            try:
+                frame = cv2.flip(frame, 1)
+                hand_results = hand_detector.process(frame) if hand_detector else None
+                face_results = face_detector.process(frame) if face_detector else None
+                object_results = object_detector.process(frame) if object_detector else None
 
-            if self._on_hand_seen and hand_results and hand_results.multi_hand_landmarks:
-                for hand in hand_results.multi_hand_landmarks:
-                    self._on_hand_seen(hand)
+                if self._on_hand_seen and hand_results and hand_results.multi_hand_landmarks:
+                    for hand in hand_results.multi_hand_landmarks:
+                        self._run_callback(self._on_hand_seen, hand)
 
-            if self._on_face_seen and face_results and face_results.faces:
-                for face in face_results.faces:
-                    self._on_face_seen(face)
+                if self._on_face_seen and face_results and face_results.faces:
+                    for face in face_results.faces:
+                        self._run_callback(self._on_face_seen, face)
 
-            if self._on_object_seen and object_results and object_results.objects:
-                for detected_object in object_results.objects:
-                    self._on_object_seen(detected_object)
+                if self._on_object_seen and object_results and object_results.objects:
+                    for detected_object in object_results.objects:
+                        self._run_callback(self._on_object_seen, detected_object)
 
-            if hand_detector:
-                hand_detector.draw(frame, hand_results)
-            if face_detector:
-                face_detector.draw(frame, face_results)
-            if object_detector:
-                object_detector.draw(frame, object_results)
+                if hand_detector:
+                    hand_detector.draw(frame, hand_results)
+                if face_detector:
+                    face_detector.draw(frame, face_results)
+                if object_detector:
+                    object_detector.draw(frame, object_results)
 
-            ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            if ok:
-                with self._lock:
-                    self._latest_frame = jpeg.tobytes()
+                ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                if ok:
+                    with self._lock:
+                        self._latest_frame = jpeg.tobytes()
+            except Exception:
+                # A detector blowing up mid-stream shouldn't freeze the feed for
+                # good; record it and keep trying.
+                message = f"Detection error: {_short_exc()}"
+                print(f"[cv] {message}")
+                self._set_status("error", message)
+                time.sleep(0.1)
 
         cap.release()
         if hand_detector:
@@ -174,25 +381,6 @@ def create_app(
     async def on_shutdown() -> None:
         camera_worker.stop()
 
-    @app.get("/", response_class=HTMLResponse)
-    def index():
-        return """
-        <html>
-          <body style="font-family: sans-serif; max-width: 640px; margin: 40px auto;">
-            <h1>OpenCV Gesture &amp; Face Lab - Python server</h1>
-            <p>This server is running correctly. It only provides data, not the UI.</p>
-            <p><strong>Open the Vue viewer instead</strong> (run <code>npm run dev</code>
-               in <code>vue-client</code>, then open the URL it prints, usually
-               <a href="http://localhost:5173">http://localhost:5173</a>).</p>
-            <p>Endpoints served here:</p>
-            <ul>
-              <li><a href="/video_feed">/video_feed</a> - live annotated webcam stream</li>
-              <li><code>/ws</code> - WebSocket of commands sent to the XIAO</li>
-            </ul>
-          </body>
-        </html>
-        """
-
     @app.get("/video_feed")
     def video_feed():
         return StreamingResponse(
@@ -202,11 +390,89 @@ def create_app(
 
     @app.get("/debug/status")
     def debug_status():
-        return commands.debug_status()
+        status = commands.debug_status()
+        # Surface camera/detection health and the latest student-code error so
+        # the web UI can show what's happening (e.g. a slow model download or a
+        # detector that failed to start) instead of a silent freeze.
+        status.update(camera_worker.get_health())
+        return status
+
+    @app.get("/api/code")
+    def get_code():
+        """Return the contents of main.py for the in-browser editor."""
+        return {"code": MAIN_PY.read_text(encoding="utf-8")}
+
+    @app.get("/api/files")
+    def list_files():
+        """List the files the editor can open, flagging which ones are editable."""
+        return {
+            "files": [
+                {"name": name, "editable": name in EDITABLE_FILES}
+                for name in PREVIEW_FILES
+            ]
+        }
+
+    @app.get("/api/files/{name:path}")
+    def get_file(name: str):
+        """Return one previewable file's contents, chosen from the fixed list."""
+        path = PREVIEW_FILES.get(name)
+        if path is None:
+            return {"ok": False, "error": f"Unknown file: {name}"}
+        return {"ok": True, "name": name, "code": path.read_text(encoding="utf-8")}
+
+    @app.post("/api/code")
+    def save_code(update: CodeUpdate, request: Request):
+        """Save an edited file, but only if it compiles.
+
+        Only files in EDITABLE_FILES may be written; anything else is refused so
+        the editor can't overwrite the lab plumbing or arbitrary files on disk.
+        Compile-checking first means a syntax error never reaches the file, so
+        the auto-reload can't crash on broken code and the editor stays
+        reachable. Cross-origin writes are refused so a random web page can't
+        overwrite the file while the lab is running.
+        """
+        if not _is_same_origin(request):
+            return {"ok": False, "error": "Refused: cross-origin write."}
+
+        if update.name not in EDITABLE_FILES:
+            return {"ok": False, "error": f"Not editable: {update.name}"}
+        path = PREVIEW_FILES[update.name]
+
+        try:
+            compile(update.code, update.name, "exec")
+        except SyntaxError as error:
+            return {
+                "ok": False,
+                "error": error.msg,
+                "line": error.lineno,
+            }
+
+        # Write atomically so the auto-reloader never sees a half-written file.
+        tmp = path.parent / (path.name + ".tmp")
+        tmp.write_text(update.code, encoding="utf-8")
+        os.replace(tmp, path)
+        return {"ok": True}
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
         await commands.websocket(websocket)
+
+    # Serve the prebuilt Vue web app from this same server, so the whole lab is
+    # one process on one port. Mounted last so the API routes above win. If the
+    # app hasn't been built yet, show a short hint instead.
+    if (WEB_DIST_DIR / "index.html").exists():
+        app.mount("/", StaticFiles(directory=WEB_DIST_DIR, html=True), name="web")
+    else:
+
+        @app.get("/", response_class=HTMLResponse)
+        def index_not_built():
+            return (
+                "<html><body style='font-family: sans-serif; max-width: 640px; "
+                "margin: 40px auto;'><h1>OpenCV Gesture &amp; Face Lab</h1>"
+                "<p>The web app hasn't been built yet. Run "
+                "<code>npm install &amp;&amp; npm run build</code> in "
+                "<code>vue-client</code>, then restart this server.</p></body></html>"
+            )
 
     return app
 
