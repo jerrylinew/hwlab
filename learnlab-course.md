@@ -43,8 +43,8 @@ You don't need to install Python, Node, or any code editor first — the lab
 installs everything it needs the first time you start it. You just need the
 project files.
 
-1. On the project's GitHub page, click the green **Code** button, then
-   **Download ZIP**.
+1. Go to the project on GitHub — **https://github.com/jerrylinew/hwlab** — and
+   click the green **Code** button, then **Download ZIP**.
 2. Find the downloaded `hwlab.zip` (usually in your **Downloads** folder) and
    **unzip** it — double-click on Mac, or right-click → **Extract All** on
    Windows.
@@ -301,8 +301,10 @@ joint. That distance test holds **no matter how the hand is tilted** — compari
 
 #### Section: Reading the Example Gesture
 
-The gesture rules live in `cv/gestures.py`. You *use* them from `main.py`, but
-it's worth reading the one that's already wired up, `is_thumbs_up`. Read it slowly:
+The gesture rules live in `cv/gestures.py`. You *call* them from `main.py`, and
+you can open `cv/gestures.py` right in the lab editor (pick it from the file tabs)
+to read or change them. It's worth reading the one that's already wired up,
+`is_thumbs_up`. Read it slowly:
 
 ```python
 # cv/gestures.py
@@ -381,9 +383,13 @@ question: Why measure distance-to-the-wrist instead of just comparing y values t
 #### Section: Your One Job — `when_hand_seen`
 
 You edit your code **right on the lab page** — scroll down to the **Edit Your
-Gestures** panel. That panel *is* `main.py`, the one file you change. There's no
-separate code editor to install. When you click **Save & Run**, the lab checks
-your code for typos, saves it, and restarts itself with your changes.
+Gestures** panel. It opens `main.py`, where you'll spend most of your time. Use
+the **file tabs** at the top of the panel to switch files: `main.py` and
+`cv/gestures.py` are both editable, while the rest are read-only (marked with a
+🔒) so you can read the lab's plumbing without breaking it. There's no separate
+code editor to install. When you click **Save & Run** — or press **Cmd-S** (Mac)
+/ **Ctrl-S** (Windows) — the lab checks your code for typos, saves it, and
+restarts itself with your changes.
 
 `main.py` is short — almost all of it is the one function you edit:
 
@@ -498,8 +504,9 @@ A closed fist is just as easy — that's zero extended fingers:
 
 #### Section: Going Deeper (Optional) — Write Your Own Classifier
 
-Want full control? Add your own function to `cv/gestures.py`, right next to
-`is_thumbs_up`, then import and use it from `main.py`. Reuse the `_extended`
+Want full control? Open `cv/gestures.py` from the file tabs in the lab editor and
+add your own function, right next to `is_thumbs_up`, then import and use it from
+`main.py`. Reuse the `_extended`
 helper that's already there — it reports whether one finger is extended, using
 the rotation-safe distance-to-wrist test. For example, a "peace sign" extends
 index + middle while curling ring + pinky:
