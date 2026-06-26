@@ -59,7 +59,7 @@ line), saves, and restarts with your change. The part you edit is intentionally
 small:
 
 ```py
-SEND_TO_XIAO = True  # change to False for web-page only
+SEND_TO_XIAO = False  # web-page only; change to True to also send to the XIAO
 
 def when_hand_seen(hand):
     send_when(is_thumbs_up(hand), "thumbs_up")

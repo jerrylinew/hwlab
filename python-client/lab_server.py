@@ -34,11 +34,30 @@ ObjectGesture = Callable[[object], None]
 WEB_DIST_DIR = Path(__file__).resolve().parent.parent / "vue-client" / "dist"
 
 # The one file students edit. The in-browser editor reads and writes it here.
-MAIN_PY = Path(__file__).resolve().parent / "main.py"
+PYTHON_DIR = Path(__file__).resolve().parent
+MAIN_PY = PYTHON_DIR / "main.py"
+
+# Files the in-browser editor can open. Only main.py is editable; the rest are
+# read-only so students can preview the lab plumbing the curriculum references
+# without being able to break it. The keys are the only paths the read endpoint
+# will serve, so there's no way to read arbitrary files off disk.
+PREVIEW_FILES = {
+    "main.py": MAIN_PY,
+    "cv/gestures.py": PYTHON_DIR / "cv" / "gestures.py",
+    "command_block.py": PYTHON_DIR / "command_block.py",
+    "lab_server.py": PYTHON_DIR / "lab_server.py",
+    "xiao_client.py": PYTHON_DIR / "xiao_client.py",
+}
+
+# Of the previewable files, the ones students may actually edit and save. The
+# rest stay read-only so the editor can't overwrite the lab plumbing. main.py
+# holds the gesture wiring; cv/gestures.py holds the gesture-detection rules.
+EDITABLE_FILES = {"main.py", "cv/gestures.py"}
 
 
 class CodeUpdate(BaseModel):
     code: str
+    name: str = "main.py"
 
 
 def _is_same_origin(request: Request) -> bool:
@@ -63,14 +82,18 @@ def _short_exc() -> str:
 def _format_user_error() -> str:
     """Turn the live exception into a short, student-friendly message.
 
-    Picks out the line number inside main.py so the editor can point at it.
+    Picks out the line number inside an editable file (main.py or
+    cv/gestures.py) so the editor can point at it.
     """
     exc_type, exc, tb = sys.exc_info()
+    editable_basenames = {Path(p).name for p in EDITABLE_FILES}
     line = None
+    file_name = None
     for frame in traceback.extract_tb(tb):
-        if Path(frame.filename).name == "main.py":
+        if Path(frame.filename).name in editable_basenames:
             line = frame.lineno
-    where = f"line {line}: " if line else ""
+            file_name = Path(frame.filename).name
+    where = f"{file_name} line {line}: " if line else ""
     return f"{where}{exc_type.__name__}: {exc}"
 
 
@@ -379,10 +402,30 @@ def create_app(
         """Return the contents of main.py for the in-browser editor."""
         return {"code": MAIN_PY.read_text(encoding="utf-8")}
 
+    @app.get("/api/files")
+    def list_files():
+        """List the files the editor can open, flagging which ones are editable."""
+        return {
+            "files": [
+                {"name": name, "editable": name in EDITABLE_FILES}
+                for name in PREVIEW_FILES
+            ]
+        }
+
+    @app.get("/api/files/{name:path}")
+    def get_file(name: str):
+        """Return one previewable file's contents, chosen from the fixed list."""
+        path = PREVIEW_FILES.get(name)
+        if path is None:
+            return {"ok": False, "error": f"Unknown file: {name}"}
+        return {"ok": True, "name": name, "code": path.read_text(encoding="utf-8")}
+
     @app.post("/api/code")
     def save_code(update: CodeUpdate, request: Request):
-        """Save edited main.py, but only if it compiles.
+        """Save an edited file, but only if it compiles.
 
+        Only files in EDITABLE_FILES may be written; anything else is refused so
+        the editor can't overwrite the lab plumbing or arbitrary files on disk.
         Compile-checking first means a syntax error never reaches the file, so
         the auto-reload can't crash on broken code and the editor stays
         reachable. Cross-origin writes are refused so a random web page can't
@@ -391,8 +434,12 @@ def create_app(
         if not _is_same_origin(request):
             return {"ok": False, "error": "Refused: cross-origin write."}
 
+        if update.name not in EDITABLE_FILES:
+            return {"ok": False, "error": f"Not editable: {update.name}"}
+        path = PREVIEW_FILES[update.name]
+
         try:
-            compile(update.code, "main.py", "exec")
+            compile(update.code, update.name, "exec")
         except SyntaxError as error:
             return {
                 "ok": False,
@@ -401,9 +448,9 @@ def create_app(
             }
 
         # Write atomically so the auto-reloader never sees a half-written file.
-        tmp = MAIN_PY.with_suffix(".py.tmp")
+        tmp = path.parent / (path.name + ".tmp")
         tmp.write_text(update.code, encoding="utf-8")
-        os.replace(tmp, MAIN_PY)
+        os.replace(tmp, path)
         return {"ok": True}
 
     @app.websocket("/ws")
