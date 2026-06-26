@@ -3,6 +3,29 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
+// A single small LED on one GPIO pin. The simplest possible output.
+// activeLow = true for LEDs wired so the pin must go LOW to light (like the
+// XIAO's built-in LED); false for a plain LED + resistor to GND (the usual
+// breadboard wiring, e.g. on GPIO0 / D0).
+class Led {
+public:
+  explicit Led(int pin, bool activeLow = false);
+
+  void begin();
+  void on();
+  void off();
+  void toggle();
+  void set(bool isOn);
+  bool isOn() const;
+
+private:
+  void write();
+
+  int _pin;
+  bool _activeLow;
+  bool _on;
+};
+
 class RgbLed {
 public:
   RgbLed(int redPin, int greenPin, int bluePin, bool commonAnode = true, bool usePwm = false);
@@ -65,6 +88,10 @@ public:
   void drawLine(int x0, int y0, int x1, int y1, uint32_t color);
   void drawChar(int x, int y, char value, uint32_t color);
   void drawText(int x, int y, const String& text, uint32_t color);
+  // Draw a static 1-bit image. Each entry in `rows` is one 16-pixel row: the
+  // most-significant bit is the left pixel (x=0), the least-significant the
+  // right (x=15). A set bit is drawn in `color`, a clear bit is left alone.
+  void drawBitmap(const uint16_t* rows, int height, uint32_t color);
   void scrollText(const String& text, int offset, uint32_t color);
   void show();
 

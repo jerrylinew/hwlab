@@ -2,6 +2,28 @@
 
 #include <math.h>
 
+Led::Led(int pin, bool activeLow) : _pin(pin), _activeLow(activeLow), _on(false) {}
+
+void Led::begin() {
+  pinMode(_pin, OUTPUT);
+  write();
+}
+
+void Led::write() {
+  digitalWrite(_pin, (_on != _activeLow) ? HIGH : LOW);
+}
+
+void Led::on() { set(true); }
+void Led::off() { set(false); }
+void Led::toggle() { set(!_on); }
+
+void Led::set(bool isOn) {
+  _on = isOn;
+  write();
+}
+
+bool Led::isOn() const { return _on; }
+
 RgbLed::RgbLed(int redPin, int greenPin, int bluePin, bool commonAnode, bool usePwm)
   : _redPin(redPin), _greenPin(greenPin), _bluePin(bluePin), _commonAnode(commonAnode), _usePwm(usePwm), _colorIndex(-1), _colorName("off"), _red(0), _green(0), _blue(0) {}
 
@@ -193,6 +215,14 @@ void LightGrid16x16::drawText(int x, int y, const String& text, uint32_t color) 
 void LightGrid16x16::scrollText(const String& text, int offset, uint32_t color) {
   clear();
   drawText(16 - offset, 4, text, color);
+}
+
+void LightGrid16x16::drawBitmap(const uint16_t* rows, int height, uint32_t color) {
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < 16; x++) {
+      if (rows[y] & (1 << (15 - x))) setPixel(x, y, color);
+    }
+  }
 }
 
 void LightGrid16x16::show() {
