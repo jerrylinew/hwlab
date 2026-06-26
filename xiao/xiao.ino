@@ -76,8 +76,8 @@ const uint16_t SMILEY[16] = {
 #endif
 
 // Change WiFi settings here. The setup code lives in src/HWLabSetup.*,
-const char* WIFI_NAME = "HWLab-XIAO";
-const char* WIFI_PASSWORD = "hwlab1234";
+const char* WIFI_NAME = "";
+const char* WIFI_PASSWORD = "";
 
 // The following is a set of example code, you can remove it after you test your wiring
 
