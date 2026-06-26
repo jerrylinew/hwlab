@@ -1,5 +1,5 @@
-# Course: OpenCV Gesture & Face Lab
-description: Build a webcam gesture controller — detect hand gestures with Python and MediaPipe, stream the result to a live web viewer, and fire commands at a microcontroller.
+# Course: AI and Computer Vision Lab
+description: Build a gesture controller with your webcam — make a thumbs-up or a smile trigger an action, watch it happen live in your browser, and even light up a real gadget.
 pace: 2
 
 ## Unit: Getting Set Up
@@ -8,34 +8,29 @@ pace: 2
 
 #### Section: What You're Building
 
-Welcome to the **OpenCV Gesture & Face Lab**. By the end of this workshop you'll
-have a working system that watches your webcam, recognizes hand gestures, and
-turns them into commands — the same idea behind touchless kiosks, sign-language
-tools, and gesture-controlled robots.
+Welcome! By the end of this workshop you'll have built something that **watches
+your webcam, recognizes your hand gestures, and turns them into actions** — like
+giving a thumbs-up to turn on a light. It's the same idea behind touchless
+kiosks, sign-language apps, and gesture-controlled robots.
 
-The project has **two halves** that run at the same time:
+Here's the whole thing in one sentence:
 
-- **The Python "brain"** (`python-client/`) — opens your webcam, runs hand and
-  face detection on every frame, and decides when a gesture happened. You only
-  ever edit one small file here: `main.py`.
-- **The Vue "website"** (`vue-client/`) — a web page you can customize. It shows
-  the latest command coming from Python, lets you send a message *back* to
-  Python, and can reveal the live annotated camera feed.
+> **Your camera sees a gesture → your code decides what it means → something happens.**
 
-They talk to each other over two channels:
+There are **three pieces** working together:
 
-| Channel | What it carries |
-|---|---|
-| `GET /video_feed` | The live webcam image, with detection drawn on top |
-| `WS /ws` | A two-way stream of commands — Python → website, and website → Python |
+- **The camera watcher** — software running on your computer that looks at your
+  webcam and figures out what your hands and face are doing.
+- **The web page** — a page that opens in your browser and shows the live camera
+  view and the gestures it spots as they happen.
+- **The gadget** *(optional, later)* — a small gizmo that can blink a light or
+  spin a motor when you make a gesture, so the action can happen out in the real
+  world and not just on screen.
 
-Later, recognized commands are also sent over WiFi to a **Seeed Studio XIAO**
-microcontroller, so a gesture in front of your laptop can blink an LED or drive
-a motor across the room.
-
-Here's the whole pipeline in one line:
-
-> **webcam → OpenCV → MediaPipe detection → your gesture rule → command → (Vue website + XIAO)**
+The good news: most of this is already built for you. **Your job is to write the
+rules** — the part that says "when the camera sees *this*, do *that*." You'll do
+that by editing one short file, and you'll see your changes come to life
+instantly in the browser.
 
 #### Section: Download the Project
 
@@ -43,8 +38,8 @@ You don't need to install Python, Node, or any code editor first — the lab
 installs everything it needs the first time you start it. You just need the
 project files.
 
-1. On the project's GitHub page, click the green **Code** button, then
-   **Download ZIP**.
+1. Go to the project on GitHub — **[github.com/jerrylinew/hwlab](https://github.com/jerrylinew/hwlab)** — and
+   click the green **Code** button, then **Download ZIP**.
 2. Find the downloaded `hwlab.zip` (usually in your **Downloads** folder) and
    **unzip** it — double-click on Mac, or right-click → **Extract All** on
    Windows.
@@ -59,17 +54,28 @@ Inside the `hwlab` folder there are two launchers. Use the one for your computer
 - **Mac:** double-click **`Start HW Lab.command`**.
 - **Windows:** double-click **`Start HW Lab.bat`**.
 
+> ⚠️ **First-time security warning — this is expected.** The launcher isn't
+> signed by the App Store, so your computer blocks it the very first time and you
+> have to allow it once:
+>
+> - **Mac:** double-clicking shows a warning that the file *"cannot be opened
+>   because it is from an unidentified developer"* (or *"Apple could not verify…"*).
+>   Click **Done**, then open **System Settings → Privacy & Security** and scroll
+>   down to the **Security** section. You'll see a note that
+>   *"Start HW Lab.command" was blocked* — click **Open Anyway**, then confirm
+>   with **Open Anyway** and your password or Touch ID. Now double-click the
+>   launcher again. You only do this once.
+> - **Windows:** a blue **"Windows protected your PC"** box appears — click
+>   **More info**, then **Run anyway**.
+
 The **first time**, a black window opens and spends a few minutes installing
 Python, the camera libraries, and everything else automatically. When it's
 ready, your web browser opens to the lab at **http://localhost:8000**, showing
 your webcam with detection drawn on top. Later starts take only a few seconds.
 
-A couple of one-time prompts to expect:
+One more first-time prompt, once the lab is running:
 
 - **"Allow camera access?"** — click **Allow**, or the feed stays black.
-- A security warning the very first time you open the launcher: on **Mac**,
-  right-click the file → **Open** → **Open**; on **Windows**, click
-  **More info** → **Run anyway**.
 
 **Leave the black window open while you work.** It *is* the lab — closing it (or
 pressing **Ctrl-C** inside it) stops everything.
@@ -301,8 +307,10 @@ joint. That distance test holds **no matter how the hand is tilted** — compari
 
 #### Section: Reading the Example Gesture
 
-The gesture rules live in `cv/gestures.py`. You *use* them from `main.py`, but
-it's worth reading the one that's already wired up, `is_thumbs_up`. Read it slowly:
+The gesture rules live in `cv/gestures.py`. You *call* them from `main.py`, and
+you can open `cv/gestures.py` right in the lab editor (pick it from the file tabs)
+to read or change them. It's worth reading the one that's already wired up,
+`is_thumbs_up`. Read it slowly:
 
 ```python
 # cv/gestures.py
@@ -381,9 +389,13 @@ question: Why measure distance-to-the-wrist instead of just comparing y values t
 #### Section: Your One Job — `when_hand_seen`
 
 You edit your code **right on the lab page** — scroll down to the **Edit Your
-Gestures** panel. That panel *is* `main.py`, the one file you change. There's no
-separate code editor to install. When you click **Save & Run**, the lab checks
-your code for typos, saves it, and restarts itself with your changes.
+Gestures** panel. It opens `main.py`, where you'll spend most of your time. Use
+the **file tabs** at the top of the panel to switch files: `main.py` and
+`cv/gestures.py` are both editable, while the rest are read-only (marked with a
+🔒) so you can read the lab's plumbing without breaking it. There's no separate
+code editor to install. When you click **Save & Run** — or press **Cmd-S** (Mac)
+/ **Ctrl-S** (Windows) — the lab checks your code for typos, saves it, and
+restarts itself with your changes.
 
 `main.py` is short — almost all of it is the one function you edit:
 
@@ -498,8 +510,9 @@ A closed fist is just as easy — that's zero extended fingers:
 
 #### Section: Going Deeper (Optional) — Write Your Own Classifier
 
-Want full control? Add your own function to `cv/gestures.py`, right next to
-`is_thumbs_up`, then import and use it from `main.py`. Reuse the `_extended`
+Want full control? Open `cv/gestures.py` from the file tabs in the lab editor and
+add your own function, right next to `is_thumbs_up`, then import and use it from
+`main.py`. Reuse the `_extended`
 helper that's already there — it reports whether one finger is extended, using
 the rotation-safe distance-to-wrist test. For example, a "peace sign" extends
 index + middle while curling ring + pinky:
@@ -517,7 +530,8 @@ def is_peace_sign(hand_landmarks) -> bool:
 ```
 
 Then in `main.py`: `from cv import ..., is_peace_sign` and
-`send_when(is_peace_sign(hand), "peace")`.
+`send_when(is_peace_sign(hand), "peace")`. That's it — `cv` automatically picks up
+any gesture you add to `gestures.py`, so you never have to edit another file.
 
 #### Section: Check Your Understanding
 
@@ -576,9 +590,400 @@ question: What does `receive()` return?
 - The webcam frame as a JPEG
 ```
 
+## Unit: Set Up the Arduino IDE
+
+### Lesson: Install the IDE and the XIAO Board
+
+#### Section: Why You Need the Arduino IDE
+
+So far everything has run on your laptop. To make a **real gadget** react — light
+an LED, beep a buzzer, draw on a panel — you have to load a program onto the
+**Seeed Studio XIAO ESP32C3** microcontroller. The tool that compiles that
+program and copies it onto the board is the **Arduino IDE**.
+
+You'll do this once: install the IDE, teach it about the XIAO board, then upload
+the lab firmware. After that, every gesture you make can reach into the real
+world.
+
+> 📷 *The screenshots below are reference shots from the official guides — your
+> screen may look slightly different by version. Replace them with your own as
+> needed.*
+
+#### Section: Install the Arduino IDE
+
+Follow Arduino's official guide:
+**[Download and install Arduino IDE](https://support.arduino.cc/hc/en-us/articles/360019833020-Download-and-install-Arduino-IDE)**.
+
+1. Go to **[arduino.cc/en/software](https://www.arduino.cc/en/software)** and
+   download the **Arduino IDE 2.x** for your operating system (Windows, macOS, or
+   Linux).
+
+   ![Arduino IDE download page](images/arduino-download.png)
+
+2. **Windows:** run the downloaded `.exe`, accept the license, keep the default
+   options, and click **Install**. If Windows asks to install USB drivers, click
+   **Yes / Install** — the board needs them.
+
+   **macOS:** open the downloaded file and **drag the Arduino IDE icon into your
+   Applications folder**, then open it. The first time, macOS may warn it's from
+   an unidentified developer — open **System Settings → Privacy & Security** and
+   click **Open Anyway**.
+
+   ![Installing the Arduino IDE](images/arduino-install.png)
+
+3. Open the Arduino IDE. You should see a blank sketch with `setup()` and
+   `loop()`. You're ready.
+
+#### Section: Add the XIAO ESP32C3 Board
+
+A fresh Arduino IDE doesn't know about the XIAO yet. Teach it, following
+Seeed's guide:
+**[XIAO ESP32C3 Getting Started](https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/)**.
+
+1. Open **File → Preferences** (macOS: **Arduino IDE → Settings**). In the
+   **Additional boards manager URLs** field, paste:
+
+   ```
+   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+   ```
+
+   Click **OK**.
+
+   ![Adding the board manager URL in Preferences](https://files.seeedstudio.com/wiki/XIAO_WiFi/add_board.png)
+
+2. Open **Tools → Board → Boards Manager**, type **`esp32`** in the search box,
+   find **esp32 by Espressif Systems**, and click **Install**. (This downloads a
+   few hundred MB — give it a minute.)
+
+   ![Installing the esp32 board package](https://files.seeedstudio.com/wiki/XIAO_WiFi/add_esp32c3.png)
+
+3. Plug the XIAO into a USB port. Then open **Tools → Board → ESP32 Arduino** and
+   scroll down to choose **XIAO_ESP32C3**.
+
+   ![Selecting the XIAO_ESP32C3 board](https://files.seeedstudio.com/wiki/Seeed-Studio-XIAO-ESP32/XIAO_ESP32_board.png)
+
+4. Open **Tools → Port** and pick the port that appeared when you plugged in the
+   board (often `COM3` or higher on Windows, or `/dev/cu.usbmodem…` on macOS).
+
+#### Section: A Simple LED on GPIO0 (Your First Sketch)
+
+Before uploading the big lab firmware, prove the whole chain works with the
+classic first program — a **blinking LED.** Unlike many dev boards, the XIAO
+ESP32C3 has **no built-in user LED**, so you'll wire your own to **GPIO0**.
+
+**Wiring:**
+
+![Breadboard wiring: an LED on GPIO0 (D0) through a 220 Ω resistor to GND](https://raw.githubusercontent.com/jerrylinew/hwlab/main/images/led-gpio0-wiring.png)
+
+- The LED's **long leg** (positive) goes to **GPIO0 — the pin labeled `D0`** —
+  through a **220 Ω resistor** so it doesn't draw too much current.
+- The LED's **short leg** (negative) goes to **GND**.
+
+In the Arduino IDE, **File → New Sketch**, delete what's there, and type this in
+yourself:
+
+```cpp
+#define LED_PIN D0   // the pin your LED's long leg connects to
+
+void setup() {
+  pinMode(LED_PIN, OUTPUT);   // get the pin ready
+}
+
+void loop() {
+  digitalWrite(LED_PIN, HIGH);  // LED ON  (a breadboard LED lights on HIGH)
+  delay(500);                   // wait half a second
+  digitalWrite(LED_PIN, LOW);   // LED OFF
+  delay(500);                   // wait half a second
+}
+```
+
+Click the **→ Upload** button (top-left). When it finishes, your LED blinks once
+a second. 🎉 You just compiled and ran code on real hardware.
+
+> **Make it yours:** change both `delay(500)` values to `delay(100)` for a fast
+> blink, or `delay(1000)` for a slow one. Upload again and watch it change.
+
+Here a breadboard LED lights when the pin goes **HIGH**; pulling it `LOW` turns
+it off. (That's the opposite of boards with a built-in LED, which are usually
+*active-low* — the XIAO simply doesn't have one.)
+
+#### Section: Change the WiFi Password
+
+⚠️ **Before you upload, change the WiFi password.** Every XIAO ships with the
+same default network name and password, so in a room full of labs they'd all
+collide — and anyone nearby could join yours. Near the top of `xiao/xiao.ino`,
+edit these two lines:
+
+```cpp
+const char* WIFI_NAME = "HWLab-XIAO";     // pick a unique name
+const char* WIFI_PASSWORD = "hwlab1234";  // pick your own password (8+ characters)
+```
+
+Give your network a name you'll recognize and a password **at least 8
+characters** long (the ESP32 requires it). Then upload, and when you join the
+XIAO's WiFi from your laptop later, use the new name and password.
+
+#### Section: Check Your Understanding
+
+```quiz
+type: mc
+question: Why do you paste a URL into "Additional boards manager URLs" in Preferences?
+- To connect to the XIAO's WiFi
+- *So the Arduino IDE can download the ESP32 board package and know about the XIAO_ESP32C3
+- To set the upload speed
+- To install Python
+```
+
+```quiz
+type: mc
+question: You wire an LED from D0 through a resistor to GND, but it never lights — even though the pin goes HIGH. What's the most likely fix?
+- *Flip the LED around — the long leg (positive) must go to D0, the short leg to GND
+- Delete the resistor
+- The XIAO's built-in LED is broken
+- Switch to a buzzer
+```
+
+### Lesson: Hardware Modifications
+
+#### Section: Beyond the LED
+
+The simple LED is enough to demo the whole pipeline. But the firmware can drive
+more, and each add-on works the same way: wire it to a pin, and call a small
+helper. This lesson is optional — pick up a **buzzer** or a **16×16 LED grid**
+when you want a bigger payoff.
+
+#### Section: Add a Buzzer
+
+A piezo buzzer is the same idea as an LED — one signal pin — but it makes
+*sound*. The firmware ships a `Buzzer` submodule that plays musical notes by
+name.
+
+**Wiring** *(a wiring photo will be added here)*:
+
+- The buzzer's **signal** pin goes to **`D2`**.
+- The buzzer's **other** pin goes to **GND**.
+
+Then tell the firmware which pin it's on by uncommenting one line in `setup()`:
+
+```cpp
+// xiao/xiao.ino
+void setup() {
+  led.begin();
+  buzzer.begin(D2);   // <-- uncomment this after wiring the buzzer
+  ...
+}
+```
+
+Now any command can make noise:
+
+```cpp
+buzzer.playNote("C4", 250);   // note name, milliseconds
+buzzer.playNote("A5", 100);   // higher and shorter
+
+// play a little tune:
+const String notes[]   = {"C4", "E4", "G4", "C5"};
+const int    durs[]    = {200, 200, 200, 400};
+buzzer.playMelody(notes, durs, 4);
+```
+
+Note names are a letter (`C`–`B`), an optional `#` for sharp, and an octave
+number — so `"C4"`, `"F#4"`, `"A5"`. Use `"REST"` for a silent beat.
+
+#### Section: Wire the Panel and Install the Library (16×16 Grid)
+
+For a bigger payoff than one LED, the firmware includes **`LightGrid16x16`** — a
+16×16 drawing canvas. To light a real panel:
+
+1. Wire a **WS2812B / NeoPixel 16×16 matrix**: its `DIN` to pin **`D6`**, `5V` to
+   `5V`, and `GND` to `GND`. *(A wiring photo will be added here.)*
+2. In the Arduino IDE, open **Tools → Manage Libraries**, search **Adafruit
+   NeoPixel**, and install it.
+3. In `xiao/xiao.ino`, change `#define USE_LED_MATRIX 0` to **`1`** and upload
+   again.
+
+The mapping from "draw on a grid" to "set the right LED" — including the zig-zag
+wiring of most panels — is handled for you in the `matrixWriter` function. You
+just draw; `renderMatrix()` pushes your drawing to the panel.
+
+#### Section: The LightGrid API
+
+You draw onto the grid, then call `renderMatrix()` to show it. Coordinates run
+`x` 0–15 left to right and `y` 0–15 top to bottom. Colors are `0xRRGGBB`
+(e.g. `0xFF0000` red, `0x00FF00` green, `0x0000FF` blue).
+
+```cpp
+lightGrid.clear();                       // turn everything off
+lightGrid.clear(0x202020);               // ...or fill with a dim color
+lightGrid.setPixel(3, 5, 0xFF0000);      // one red pixel at (3, 5)
+lightGrid.fillRect(0, 0, 4, 4, 0x00FF00); // a solid 4x4 green square
+lightGrid.drawRect(0, 0, 16, 16, 0x0000FF); // a blue border around the edge
+lightGrid.drawLine(0, 0, 15, 15, 0xFFFFFF); // a white diagonal
+lightGrid.drawText(1, 4, "HI", 0xFF00FF);   // small text
+renderMatrix();                          // <-- nothing shows until you call this
+```
+
+A quick example you can drop into `setup()` (after `lightGrid.begin(...)`): a blue
+frame with green text inside.
+
+```cpp
+lightGrid.clear();
+lightGrid.drawRect(0, 0, 16, 16, 0x0000FF);
+lightGrid.drawText(2, 5, "GO", 0x00FF00);
+renderMatrix();
+```
+
+| Call | What it does |
+|---|---|
+| `clear(color)` | Fill the whole grid (default black/off) |
+| `setPixel(x, y, color)` | Light one pixel |
+| `getPixel(x, y)` | Read a pixel's color back |
+| `fillRect(x, y, w, h, color)` | Solid rectangle |
+| `drawRect(x, y, w, h, color)` | Rectangle outline |
+| `drawLine(x0, y0, x1, y1, color)` | A line between two points |
+| `drawText(x, y, text, color)` | Draw letters and digits |
+| `drawBitmap(rows, height, color)` | Draw a static image (next section) |
+| `renderMatrix()` | Push everything you drew to the panel |
+
+#### Section: Draw a Static Image From a Bitmap
+
+To draw a **picture** instead of shapes, describe it as a **bitmap**: one number
+per row, where each *bit* is one pixel — `1` lights up, `0` stays dark. Because
+the grid is 16 wide, each row is a 16-bit number, and the leftmost pixel is the
+highest bit.
+
+The firmware includes a `SMILEY` bitmap you can edit pixel by pixel:
+
+```cpp
+// xiao/xiao.ino — change the 1s and 0s to draw your own image
+const uint16_t SMILEY[16] = {
+  0b0000000000000000,
+  0b0001111111110000,
+  0b0011000000011000,
+  0b0110000000001100,
+  0b0100110001100100,
+  0b1100110001100110,
+  0b1100000000000110,
+  0b1100000000000110,
+  0b1100100000010110,
+  0b1100110000110110,
+  0b0110011111100100,
+  0b0110000000001100,
+  0b0011000000011000,
+  0b0001111111110000,
+  0b0000000000000000,
+  0b0000000000000000,
+};
+
+// draw it in green:
+lightGrid.clear();
+lightGrid.drawBitmap(SMILEY, 16, 0x00FF00);
+renderMatrix();
+```
+
+`drawBitmap(rows, height, color)` walks each row and lights every `1` in the
+color you pass. Design your own image by flipping bits — a heart, an arrow, your
+initials. There are no built-in pictures: the bitmap is yours to define.
+
+#### Section: Wire It to Your Gestures
+
+In the example firmware, gestures already drive the grid (when `USE_LED_MATRIX`
+is `1`): an **open palm** draws the smiley, a **fist** clears it. The handler
+looks like this:
+
+```cpp
+case CommandCode::OpenHand:
+  led.on();
+  lightGrid.clear();
+  lightGrid.drawBitmap(SMILEY, 16, 0x00FF00);
+  renderMatrix();
+  break;
+
+case CommandCode::Fist:
+  led.off();
+  lightGrid.clear();
+  renderMatrix();
+  break;
+```
+
+Swap in your own bitmap, change the color, or draw text instead — then make the
+gesture and watch your panel light up.
+
+#### Section: Check Your Understanding
+
+```quiz
+type: mc
+question: Which call makes the buzzer play a note?
+- led.toggle()
+- *buzzer.playNote("C4", 250)
+- buzzer.on()
+- lightGrid.show()
+```
+
+```quiz
+type: mc
+question: What do you need before the 16×16 matrix code will work?
+- Nothing, it's on by default
+- *Wire the panel to D6, install the Adafruit NeoPixel library, and set USE_LED_MATRIX to 1
+- A second XIAO board
+- A different web browser
+```
+
+```quiz
+type: mc
+question: You called several `lightGrid` drawing functions but the panel stays dark. What did you forget?
+- To plug in the LED on D0
+- *To call `renderMatrix()` — drawing only changes the buffer until you push it to the panel
+- To install Python
+- To lower the camera resolution
+```
+
+```quiz
+type: mc
+question: In a `drawBitmap` row like `0b0001111111110000`, what does each bit control?
+- The brightness of the whole row
+- *One pixel — a 1 lights that pixel in the chosen color, a 0 leaves it dark
+- The color of the row
+- Nothing; the number is decorative
+```
+
 ## Unit: Talk to the Hardware
 
 ### Lesson: From Laptop to Microcontroller
+
+#### Section: Upload the Lab Firmware
+
+Now load the real thing. In the IDE, **File → Open**, navigate into your `hwlab`
+folder, and open **`xiao/xiao.ino`**. With **XIAO_ESP32C3** and the right
+**Port** still selected, click **→ Upload**.
+
+When it's done, the XIAO starts its own WiFi network (`HWLab-XIAO`) and is ready
+to receive commands over WiFi — which is what the rest of this unit walks you
+through.
+
+The firmware drives that same LED on `D0` through a tiny helper class, `Led`, so
+you control it in plain English instead of raw `digitalWrite`:
+
+```cpp
+// xiao/xiao.ino — already set up for you
+Led led(D0);            // a single LED on GPIO0 (HIGH = on)
+
+void setup() {
+  led.begin();          // get the pin ready
+}
+```
+
+```cpp
+led.on();               // turn it on
+led.off();              // turn it off
+led.toggle();           // flip it
+led.set(true);          // on; led.set(false) is off
+bool lit = led.isOn();  // is it currently on?
+```
+
+In the example firmware a **thumbs-up** from Python toggles this LED, an **open
+palm** turns it on, and a **fist** turns it off. Want a second LED? `Led` works
+on any free pin — add `Led led2(D1);`, call `led2.begin()` in `setup()`, and
+light it from a different command.
 
 #### Section: Meet the XIAO Client
 
@@ -698,7 +1103,7 @@ Want to go further? Try one of these:
   call only ever sees one hand. To require *both* hands, track state across calls
   (e.g. remember the last hand's gesture in a module-level variable).
 - **Make the XIAO react.** In `xiao/xiao.ino`, map commands like `"thumbs_up"` and
-  `"open_hand"` to different LED colors or motor actions.
+  `"open_hand"` to your own mix of LED, buzzer, and 16×16 grid actions.
 
 When it works, demo it to the group: make your gesture and watch the command
 land in the log — and, if you've wired up a XIAO, in the real world.
