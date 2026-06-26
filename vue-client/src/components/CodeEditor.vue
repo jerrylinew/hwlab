@@ -29,6 +29,14 @@ const saving = ref(false);
 // { kind: "ok" | "syntax", text, line? } describing the last save attempt.
 const saveResult = ref(null);
 
+// The active file's contents as last loaded or saved, so we can tell whether the
+// editor has unsaved edits (used to autosave before switching files).
+const baselineCode = ref("");
+
+function isDirty() {
+  return !!view.value && view.value.state.doc.toString() !== baselineCode.value;
+}
+
 // The list of files the server lets us open, and which one is showing. main.py
 // is editable; the rest are read-only previews of the lab plumbing.
 const files = ref([]);
@@ -64,6 +72,7 @@ async function loadCode() {
       files.value = (await listResponse.json()).files ?? [];
     }
     const code = await fetchFile(activeFile.value);
+    baselineCode.value = code;
     view.value = new EditorView({
       doc: code,
       extensions: [
@@ -83,10 +92,20 @@ async function selectFile(name) {
   if (!view.value || name === activeFile.value) {
     return;
   }
+  // Autosave the current file's edits before leaving it, so switching tabs
+  // never silently drops changes. If the save is rejected for a syntax error,
+  // stay put so the student can fix it instead of losing the broken edits.
+  if (activeEditable.value && isDirty()) {
+    await save();
+    if (saveResult.value?.kind === "syntax") {
+      return;
+    }
+  }
   // Clear any save note from the previous file before switching.
   saveResult.value = null;
   try {
     const code = await fetchFile(name);
+    baselineCode.value = code;
     activeFile.value = name;
     view.value.dispatch({
       changes: { from: 0, to: view.value.state.doc.length, insert: code },
@@ -120,6 +139,7 @@ async function save() {
     });
     const result = await response.json();
     if (result.ok) {
+      baselineCode.value = code; // this version is now on disk — no longer dirty
       saveResult.value = { kind: "ok", text: "Saved! The lab is restarting with your changes..." };
     } else if (result.line) {
       saveResult.value = {
@@ -134,6 +154,7 @@ async function save() {
     // The server writes the file then auto-reloads, which can drop this request
     // mid-flight (or trip the timeout above). That almost always means the save
     // landed and the lab is restarting.
+    baselineCode.value = code;
     saveResult.value = { kind: "ok", text: "Saved! The lab is restarting with your changes..." };
   } finally {
     window.clearTimeout(timer);

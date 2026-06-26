@@ -21,7 +21,7 @@ OBJECT_MODEL = "Cup"
 
 # True  = send commands to the Vue website and the Seeed Studio XIAO.
 # False = send commands only to the Vue website.
-SEND_TO_XIAO = True
+SEND_TO_XIAO = False
 set_send_to_xiao(SEND_TO_XIAO)
 
 
