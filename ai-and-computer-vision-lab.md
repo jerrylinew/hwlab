@@ -553,43 +553,6 @@ question: You want a thumbs-up and an open palm to send different commands. What
 - Increase `GESTURE_CONFIRM_FRAMES`
 ```
 
-## Unit: Talk Back
-
-### Lesson: Listening to the Website
-
-#### Section: Messages Flow Both Ways
-
-So far Python has done all the talking. But the `/ws` channel is two-way — the
-website can send messages *to* Python too. On the default "My HW Lab Website"
-page there's a **"Send A Message To Python"** button; clicking it sends
-`hello_from_vue`.
-
-To read it on the Python side, use the third one-line block, `receive()`:
-
-```python
-def when_hand_seen(hand):
-    send_when(is_thumbs_up(hand), "thumbs_up")
-
-    message = receive()              # the last message from the website (or XIAO)
-    if message == "hello_from_vue":
-        send("got_your_message")
-```
-
-`receive()` returns the most recent command string the website sent (or `None`
-if there hasn't been one). Save, show the camera a hand, click the website button,
-and watch `got_your_message` come back — a full round trip.
-
-#### Section: Check Your Understanding
-
-```quiz
-type: mc
-question: What does `receive()` return?
-- The next gesture the camera will see
-- *The most recent command the website (or XIAO) sent to Python, or None
-- The number of extended fingers
-- The webcam frame as a JPEG
-```
-
 ## Unit: Set Up the Arduino IDE
 
 ### Lesson: Install the IDE and the XIAO Board
@@ -618,8 +581,6 @@ Follow Arduino's official guide:
    download the **Arduino IDE 2.x** for your operating system (Windows, macOS, or
    Linux).
 
-   ![Arduino IDE download page](images/arduino-download.png)
-
 2. **Windows:** run the downloaded `.exe`, accept the license, keep the default
    options, and click **Install**. If Windows asks to install USB drivers, click
    **Yes / Install** — the board needs them.
@@ -628,8 +589,6 @@ Follow Arduino's official guide:
    Applications folder**, then open it. The first time, macOS may warn it's from
    an unidentified developer — open **System Settings → Privacy & Security** and
    click **Open Anyway**.
-
-   ![Installing the Arduino IDE](images/arduino-install.png)
 
 3. Open the Arduino IDE. You should see a blank sketch with `setup()` and
    `loop()`. You're ready.
@@ -673,7 +632,7 @@ ESP32C3 has **no built-in user LED**, so you'll wire your own to **GPIO0**.
 
 **Wiring:**
 
-![Breadboard wiring: an LED on GPIO0 (D0) through a 220 Ω resistor to GND](https://raw.githubusercontent.com/jerrylinew/hwlab/main/images/led-gpio0-wiring.png)
+![Breadboard wiring: an LED on GPIO0 (D0) through a 220 Ω resistor to GND](https://raw.githubusercontent.com/jerrylinew/hwlab/refs/heads/main/images/led-gpio0-wiring.png)
 
 - The LED's **long leg** (positive) goes to **GPIO0 — the pin labeled `D0`** —
   through a **220 Ω resistor** so it doesn't draw too much current.
@@ -704,24 +663,7 @@ a second. 🎉 You just compiled and ran code on real hardware.
 > blink, or `delay(1000)` for a slow one. Upload again and watch it change.
 
 Here a breadboard LED lights when the pin goes **HIGH**; pulling it `LOW` turns
-it off. (That's the opposite of boards with a built-in LED, which are usually
-*active-low* — the XIAO simply doesn't have one.)
-
-#### Section: Change the WiFi Password
-
-⚠️ **Before you upload, change the WiFi password.** Every XIAO ships with the
-same default network name and password, so in a room full of labs they'd all
-collide — and anyone nearby could join yours. Near the top of `xiao/xiao.ino`,
-edit these two lines:
-
-```cpp
-const char* WIFI_NAME = "HWLab-XIAO";     // pick a unique name
-const char* WIFI_PASSWORD = "hwlab1234";  // pick your own password (8+ characters)
-```
-
-Give your network a name you'll recognize and a password **at least 8
-characters** long (the ESP32 requires it). Then upload, and when you join the
-XIAO's WiFi from your laptop later, use the new name and password.
+it off.
 
 #### Section: Check Your Understanding
 
@@ -743,7 +685,256 @@ question: You wire an LED from D0 through a resistor to GND, but it never lights
 - Switch to a buzzer
 ```
 
-### Lesson: Hardware Modifications
+## Unit: Send Commands to the Hardware
+
+### Lesson: From Your Laptop to the XIAO
+
+#### Section: One Command, Two Places
+
+Up to now every command you make — `thumbs_up`, `open_hand`, and the rest — has
+gone to **one place**: the web page in your browser. The exact same command can
+also go to a **second place**: the XIAO sitting on your desk.
+
+Here's the whole idea in one picture:
+
+> **Camera sees a gesture → your code sends a command → it goes to the web page
+> AND to the XIAO.**
+
+The XIAO can't plug into your web page, so it does something clever: it makes its
+**own little WiFi network**. Your laptop joins that network, and now the two can
+talk. When a command fires, your server hands the command's name (just the text,
+like `"thumbs_up"`) across that WiFi to the XIAO. The XIAO reads the name and
+does whatever you told it to do for that command.
+
+Nothing new to learn in your gesture code — it's the *same* `send_when(...)` lines
+you already wrote. You just flip one switch to also send to the XIAO, and do a
+little one-time setup on the board. That's this unit.
+
+#### Section: Set the XIAO's WiFi Name and Password
+
+Because the XIAO runs its own WiFi network, it needs a **name** and a
+**password** — and you have to pick them yourself. The lab firmware ships with
+both blank on purpose, so you can't forget this step.
+
+Open `xiao/xiao.ino` in the Arduino IDE and find these two lines near the top:
+
+```cpp
+const char* WIFI_NAME = "";       // <-- give your network a name
+const char* WIFI_PASSWORD = "";   // <-- give it a password (8+ characters)
+```
+
+Fill them in with your own values, for example:
+
+```cpp
+const char* WIFI_NAME = "Maria-XIAO";    // any name you'll recognize
+const char* WIFI_PASSWORD = "lightitup";  // must be at least 8 characters
+```
+
+Two things to get right:
+
+- **Pick a unique name.** In a room full of labs, everyone's XIAO is broadcasting
+  WiFi. A name like `Maria-XIAO` makes *yours* easy to spot, so you don't
+  accidentally join a neighbor's board.
+- **The password must be at least 8 characters.** The XIAO refuses to start its
+  network with a shorter one. Anything 8+ is fine.
+
+Write both down — you'll type them into your laptop in a moment.
+
+#### Section: Upload the Lab Firmware
+
+So far in the Arduino IDE you only ran a tiny blink sketch. Now load the **real**
+lab firmware so the XIAO can receive your commands.
+
+1. In the Arduino IDE, **File → Open**, go into your `hwlab` folder, and open
+   **`xiao/xiao.ino`** (the file you just edited the WiFi name in).
+2. Make sure **XIAO_ESP32C3** is still the selected board and the right **Port**
+   is picked (same as when you blinked the LED).
+3. Click **→ Upload**.
+
+When it finishes, the XIAO starts its WiFi network (the name you chose) and sits
+there waiting for commands. The LED you wired to `D0` earlier is still connected —
+that's the light your gestures will control.
+
+#### Section: Join the XIAO's WiFi and Flip the Switch
+
+Two quick steps connect your laptop to the board:
+
+1. **Join the XIAO's WiFi.** Open your laptop's WiFi menu, find the network name
+   you set (e.g. `Maria-XIAO`), and connect using the password you set.
+
+   > Your laptop may warn "no internet" on this network — that's expected. The
+   > XIAO's WiFi is just a private link between your laptop and the board, not a
+   > way onto the web. Stay connected to it while you work with the hardware.
+
+2. **Turn on sending to the XIAO.** In the lab's **Edit Your Gestures** panel,
+   open `main.py` and change the switch at the top from `False` to `True`:
+
+   ```python
+   SEND_TO_XIAO = True   # send commands to the website AND the XIAO
+   ```
+
+   Click **Save & Run**. From now on, every command also tries to reach the XIAO.
+
+#### Section: When the XIAO Isn't There, Nothing Breaks
+
+You might worry: what if the XIAO is unplugged, or your laptop drifts off its
+WiFi? Does the whole lab crash?
+
+No — and that's on purpose. Each time a command fires, your server **tries** to
+hand it to the XIAO. If the XIAO answers, great. If it doesn't (it's off, or
+you're not on its WiFi), your server just shrugs, notes "didn't reach the XIAO,"
+and keeps right on going. Your camera never freezes, and the command still shows
+up on the web page. A flaky gadget should never be able to crash your gesture
+detector.
+
+You can see which happened in the **Commands Sent** log. Every command gets a
+little badge:
+
+| Badge | What it means |
+|---|---|
+| **XIAO + Vue** | Sent to the web page *and* the XIAO answered — it got the command |
+| **XIAO failed** | Sending is on, but the XIAO didn't answer (off, or wrong WiFi) |
+| **Vue only** | `SEND_TO_XIAO` is `False` — sent to the web page on purpose, XIAO not tried |
+
+If you see **XIAO failed**, it's almost always one of two things: the XIAO isn't
+powered, or your laptop isn't joined to the XIAO's WiFi. Fix that and the badge
+turns into **XIAO + Vue**.
+
+#### Section: Check Your Understanding
+
+```quiz
+type: mc
+question: How does your laptop talk to the XIAO in this lab?
+- Through a cable to the web page
+- *The XIAO makes its own WiFi network, your laptop joins it, and commands travel across that link
+- Over the regular internet
+- They don't — the XIAO works on its own
+```
+
+```quiz
+type: mc
+question: You give a thumbs-up and the log shows the command with an "XIAO failed" badge. What's the most likely fix?
+- Restart your camera
+- Rewrite your gesture code
+- *Power on the XIAO and make sure your laptop is joined to the XIAO's WiFi network
+- Lower the camera resolution
+```
+
+```quiz
+type: mc
+question: Why doesn't the lab crash when the XIAO is turned off?
+- Because the XIAO is never really needed
+- *Sending to the XIAO is allowed to fail quietly — the command still reaches the web page and the camera keeps running
+- Because the web page restarts it
+- It does crash; you must keep the XIAO on at all times
+```
+
+## Unit: Make a Gesture Light the LED
+
+### Lesson: Thumbs-Up Turns On the Light
+
+#### Section: How the XIAO Decides What to Do
+
+The command name travels to the XIAO — but right now the XIAO has to know what
+`"thumbs_up"` *means*. That decision lives in one spot in `xiao/xiao.ino`: a
+function called `handleProjectCommand`. Think of it as a list of "if the command
+is X, do Y":
+
+```cpp
+void handleProjectCommand(const String& command) {
+  if (command == "thumbs_up") {
+    led.toggle();   // thumbs-up flips the LED on/off
+  }
+  else if (command == "open_hand") {
+    led.on();       // open palm turns the LED on
+  }
+  else if (command == "fist" || command == "off") {
+    led.off();      // a fist (or the "off" command) turns the LED off
+  }
+  // ...more commands below...
+}
+```
+
+When a command arrives, the XIAO checks it against each `if` and runs the lines
+that match. To add your own, copy an `if` block, change the command name in the
+quotes, and change what it does. The LED is driven by a small helper named `led`,
+set up for you at the top of the file as `Led led(D0);` — the very pin you wired
+your LED to. You control it in plain English:
+
+```cpp
+led.on();     // turn it on
+led.off();    // turn it off
+led.toggle(); // flip it
+```
+
+#### Section: Change What Thumbs-Up Does
+
+Out of the box, `thumbs_up` calls `led.toggle()` — so each thumbs-up flips the
+light on, then off, then on again. Let's make it more satisfying: **light up for
+a moment, then turn off by itself.**
+
+Find the `if (command == "thumbs_up")` block in `xiao/xiao.ino` and change it to
+this:
+
+```cpp
+if (command == "thumbs_up") {
+  led.on();        // light it up
+  delay(1000);     // ...and hold it for one second (1000 milliseconds)
+  led.off();       // then turn it off
+}
+```
+
+`delay(1000)` tells the XIAO to wait 1000 milliseconds (one second) before moving
+on. So the light comes on, stays on for a second, and switches off — all from a
+single thumbs-up. Want a longer flash? Change `1000` to `2000` for two seconds.
+
+#### Section: Upload and Try It
+
+1. Click **→ Upload** to send your changed firmware to the XIAO.
+2. Make sure you're still joined to the XIAO's WiFi and that `SEND_TO_XIAO` is
+   `True` in `main.py` (you set both in the last unit).
+3. Give the camera a **thumbs-up**.
+
+Your LED lights up for one second, then turns itself off — and the command in the
+log shows the **XIAO + Vue** badge. You just connected a gesture, made on camera,
+to a light blinking in the real world. 🎉
+
+> **Try it:** copy the same three lines into the `if (command == "open_hand")`
+> block so an open palm flashes the light too — or give it a longer `delay` so it
+> stays on longer.
+
+#### Section: Check Your Understanding
+
+```quiz
+type: mc
+question: In `xiao/xiao.ino`, where do you decide what each command does on the XIAO?
+- In `main.py` on your laptop
+- *In `handleProjectCommand`, the `if` block that matches the command name
+- In the WiFi password
+- In the web page
+```
+
+```quiz
+type: mc
+question: What does `delay(1000)` do between `led.on()` and `led.off()`?
+- Sends the command 1000 times
+- *Makes the XIAO wait one second, so the light stays on for a second before turning off
+- Sets the WiFi password length
+- Dims the LED to 1000 brightness
+```
+
+```quiz
+type: mc
+question: You upload the new firmware but a thumbs-up does nothing to the LED. What should you check first?
+- *That you're joined to the XIAO's WiFi and `SEND_TO_XIAO` is `True`
+- That the camera resolution is high enough
+- That you deleted `main.py`
+- That the LED password is correct
+```
+
+## Unit: Hardware Modifications
+
+### Lesson: Add a Buzzer and a Light Grid
 
 #### Section: Beyond the LED
 
@@ -1022,125 +1213,6 @@ question: In a `drawBitmap` row like `0b0001111111110000`, what does each bit co
 - Nothing; the number is decorative
 ```
 
-## Unit: Talk to the Hardware
-
-### Lesson: From Laptop to Microcontroller
-
-#### Section: Upload the Lab Firmware
-
-Now load the real thing. In the IDE, **File → Open**, navigate into your `hwlab`
-folder, and open **`xiao/xiao.ino`**. With **XIAO_ESP32C3** and the right
-**Port** still selected, click **→ Upload**.
-
-When it's done, the XIAO starts its own WiFi network (`HWLab-XIAO`) and is ready
-to receive commands over WiFi — which is what the rest of this unit walks you
-through.
-
-The firmware drives that same LED on `D0` through a tiny helper class, `Led`, so
-you control it in plain English instead of raw `digitalWrite`:
-
-```cpp
-// xiao/xiao.ino — already set up for you
-Led led(D0);            // a single LED on GPIO0 (HIGH = on)
-
-void setup() {
-  led.begin();          // get the pin ready
-}
-```
-
-```cpp
-led.on();               // turn it on
-led.off();              // turn it off
-led.toggle();           // flip it
-led.set(true);          // on; led.set(false) is off
-bool lit = led.isOn();  // is it currently on?
-```
-
-In the example firmware a **thumbs-up** from Python toggles this LED, an **open
-palm** turns it on, and a **fist** turns it off. Want a second LED? `Led` works
-on any free pin — add `Led led2(D1);`, call `led2.begin()` in `setup()`, and
-light it from a different command.
-
-#### Section: Meet the XIAO Client
-
-When a command fires, the `send`/`send_when` blocks ultimately call
-`send_command`, which lives in `xiao_client.py`. It just makes an HTTP request to
-the microcontroller:
-
-```python
-XIAO_IP = "192.168.4.1"   # ESP32 access-point default
-XIAO_PORT = 80
-
-def send_command(command: str) -> bool:
-    url = f"http://{XIAO_IP}:{XIAO_PORT}/command"
-    try:
-        resp = requests.post(url, json={"command": command}, timeout=1.0)
-        return resp.ok
-    except requests.RequestException:
-        return False
-```
-
-Notice it **never raises** — if the XIAO is offline, it quietly returns `False`
-so a network hiccup can't crash your camera loop. The XIAO's firmware lives in
-`xiao/xiao.ino`, and there are two companion helpers in `xiao_client.py`:
-`get_status()` and `get_command()` (the latter is what `receive()` uses to read
-state back from the XIAO).
-
-#### Section: Connect to the XIAO
-
-The XIAO firmware in this lab runs its **own WiFi access point**, so its address
-is the ESP32 default `192.168.4.1` — already set in `xiao_client.py`, usually
-nothing to change. To reach it, **join the XIAO's WiFi network** from your laptop
-(its name and password are set in `xiao/xiao.ino`).
-
-> If your XIAO is instead configured to join an existing network, it will print a
-> *different* IP to its serial monitor on boot — copy that into `XIAO_IP`, and
-> make sure your laptop is on that same network.
-
-One more switch: at the top of `main.py`, `SEND_TO_XIAO = True` sends commands to
-both the website and the XIAO. Set it to `False` to develop gestures with no
-hardware at all — commands still reach the website.
-
-#### Section: How a Command Travels
-
-Put the whole chain together. When you make a thumbs-up:
-
-1. `is_thumbs_up(hand)` returns `True` inside `when_hand_seen`.
-2. `send_when(..., "thumbs_up")` confirms it over a few frames, then calls `send`.
-3. If `SEND_TO_XIAO` is on, `send_command("thumbs_up")` POSTs
-   `{"command": "thumbs_up"}` to `http://<XIAO_IP>:80/command`.
-4. The result (`True` if the XIAO answered, `False` otherwise) becomes the
-   `sent_to_xiao` field; whether the toggle was on becomes `send_to_xiao_enabled`.
-5. That message is broadcast to the website over `/ws`.
-
-Those two fields color the badge in the log, which has **three** states:
-
-| Badge | Meaning |
-|---|---|
-| **XIAO + Vue** | Sent to the website *and* the XIAO answered |
-| **XIAO failed** | `SEND_TO_XIAO` is on, but the XIAO didn't answer (offline / wrong network) |
-| **Vue only** | `SEND_TO_XIAO` is off — sent to the website on purpose, never tried the XIAO |
-
-#### Section: Check Your Understanding
-
-```quiz
-type: mc
-question: The "Commands Sent" log shows your command with an "XIAO failed" badge. What does that tell you?
-- The gesture wasn't recognized
-- The website is disconnected
-- *The command fired and reached the website, and SEND_TO_XIAO is on, but the XIAO didn't answer (offline, wrong network, or wrong IP)
-- Your camera permission is off
-```
-
-```quiz
-type: mc
-question: Why does send_command catch exceptions and return False instead of letting them propagate?
-- To make the XIAO faster
-- *So a network problem can't crash the camera detection loop
-- Because requests can't raise exceptions
-- To hide bugs from students
-```
-
 ## Unit: Capstone
 
 ### Lesson: Make It Yours
@@ -1243,3 +1315,35 @@ subscription. To keep tinkering after the workshop and show it off to friends:
 When it works, demo it: make your gesture and watch the command land in the log —
 and, if you've wired up a XIAO, out in the real world. Then hand the camera to a
 friend and let them try.
+
+#### Section: Keep Going with Computer Vision
+
+Everything you built today — the thumbs-up, the open palm, the face detector —
+runs on **computer vision**: teaching a computer to make sense of what a camera
+sees. You've already used two of the biggest tools in the field without realizing
+it. If today was fun, here's where to go next.
+
+**The tools under the hood of this lab**
+
+- **MediaPipe** — the Google library that finds the 21 hand landmarks and the
+  face mesh you used. Its guides show how to add pose tracking (your whole body),
+  gesture recognition, and more: <https://ai.google.dev/edge/mediapipe>
+- **OpenCV** — the image-processing library that opens your webcam and draws on
+  the frames. Its beginner tutorials are excellent:
+  <https://docs.opencv.org/4.x/d9/df8/tutorial_root.html>
+
+**Where to learn the ideas**
+
+- **Roboflow** lets you collect images and train your *own* object detector
+  (not just cups and shoes) right in the browser: <https://roboflow.com>
+- **Kaggle Learn** has short, free, hands-on lessons on computer vision and
+  machine learning: <https://www.kaggle.com/learn>
+- **fast.ai** is a free, project-first deep-learning course if you want to
+  understand how the models themselves are trained: <https://www.fast.ai>
+
+**Try this next**
+
+Open `cv/gestures.py` and `cv/hand_detector.py` in the lab editor — that's the
+real code that turns camera pixels into the `hand` your gestures read. Add a new
+classifier (an "L shape," a "rock on" sign), wire it to a command, and send it to
+your XIAO. You now have the whole pipeline, end to end, to make it yours.
