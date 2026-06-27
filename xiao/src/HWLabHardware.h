@@ -79,6 +79,10 @@ class LightGrid16x16 {
 public:
   using PixelWriter = void (*)(int x, int y, uint32_t color);
 
+  // Built-in animations. Pick one and play it a frame at a time (see
+  // playAnimation). Students choose from this list by name.
+  enum class Animation { Rainbow, Pulse, Sparkle, Wipe, Spin };
+
   void begin(PixelWriter writer = nullptr);
   void clear(uint32_t color = 0x000000);
   void setPixel(int x, int y, uint32_t color);
@@ -92,8 +96,19 @@ public:
   // most-significant bit is the left pixel (x=0), the least-significant the
   // right (x=15). A set bit is drawn in `color`, a clear bit is left alone.
   void drawBitmap(const uint16_t* rows, int height, uint32_t color);
+  // Draw a full-color image: 256 0xRRGGBB values, row-major (index = y*16 + x).
+  // This is what the browser drawing tool generates a snippet for.
+  void drawFrame(const uint32_t* pixels);
   void scrollText(const String& text, int offset, uint32_t color);
   void show();
+
+  // Rainbow color wheel: hue 0..255 -> a saturated 0xRRGGBB color. Wrap-around,
+  // so hue 256 == hue 0. The building block for the Rainbow animation.
+  static uint32_t chroma(uint8_t hue);
+  // Render ONE frame of a built-in animation into the buffer. Call it with an
+  // increasing `frame` (and renderMatrix() after each) to animate. `color` is
+  // used by the animations that aren't multi-colored (Pulse, Sparkle, Wipe, Spin).
+  void playAnimation(Animation anim, int frame, uint32_t color = 0x00FF00);
 
 private:
   const byte* glyphFor(char value) const;
