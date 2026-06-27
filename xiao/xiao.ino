@@ -30,27 +30,28 @@ LightGrid16x16 lightGrid;
 
 // --- 16x16 LED matrix (optional) -------------------------------------------
 // Turn this on AFTER you (1) wire a WS2812B/NeoPixel 16x16 panel's DIN to D6,
-// and (2) install the "Adafruit NeoPixel" library (Tools > Manage Libraries).
+// and (2) install the "FastLED" library (Tools > Manage Libraries).
 // Left at 0, the sketch compiles with no extra libraries.
-#define USE_LED_MATRIX 0
+#define USE_LED_MATRIX 1  
 
 #if USE_LED_MATRIX
-#include <Adafruit_NeoPixel.h>
+#include <FastLED.h>
 #define MATRIX_PIN D6
+#define NUM_LEDS (16 * 16)
 #define MATRIX_SERPENTINE true   // most 16x16 panels zig-zag row to row
-Adafruit_NeoPixel matrix(16 * 16, MATRIX_PIN, NEO_GRB + NEO_KHZ800);
+CRGB leds[NUM_LEDS];
 
 // LightGrid16x16 calls this for every pixel when you call lightGrid.show().
 // It turns a grid (x, y) into the right LED number, undoing the panel's zig-zag.
 void matrixWriter(int x, int y, uint32_t color) {
   int col = (MATRIX_SERPENTINE && (y % 2 == 1)) ? (15 - x) : x;
-  matrix.setPixelColor(y * 16 + col, color);
+  leds[y * 16 + col] = CRGB(color);   // CRGB reads a 0xRRGGBB value directly
 }
 
 // Push whatever is in the LightGrid buffer out to the real panel.
 void renderMatrix() {
   lightGrid.show();   // walks the grid, calling matrixWriter for each pixel
-  matrix.show();      // lights the LEDs
+  FastLED.show();     // lights the LEDs
 }
 
 // A static image to draw — a smiley face. Each row is 16 pixels wide; a 1 bit
@@ -81,69 +82,43 @@ const char* WIFI_PASSWORD = "";
 
 // The following is a set of example code, you can remove it after you test your wiring
 
-enum class CommandCode {
-  ThumbsUp,
-  OpenHand,
-  Fist,
-  On,
-  Off,
-  Beep,
-  Unknown,
-};
-
-CommandCode commandCode(const String& command) {
-  if (command == "thumbs_up") return CommandCode::ThumbsUp;
-  if (command == "open_hand") return CommandCode::OpenHand;
-  if (command == "fist") return CommandCode::Fist;
-  if (command == "on") return CommandCode::On;
-  if (command == "off") return CommandCode::Off;
-  if (command == "beep") return CommandCode::Beep;
-  return CommandCode::Unknown;
-}
-
 void addProjectStatus(JsonDocument& doc) {
   doc["led_on"] = led.isOn();
 }
 
+// This runs every time a command arrives from Python. Each `if` checks the
+// command text and decides what the hardware should do. Add your own gesture by
+// copying an `if` block and changing the command name and the action.
 void handleProjectCommand(const String& command) {
-  // Example mapping for students: each gesture from Python drives an output.
-  switch (commandCode(command)) {
-    case CommandCode::ThumbsUp:
-      led.toggle();   // thumbs-up flips the LED on/off
-      break;
-
-    case CommandCode::OpenHand:
-      led.on();
+  if (command == "thumbs_up") {
+    led.toggle();   // thumbs-up flips the LED on/off
+  }
+  else if (command == "open_hand") {
+    led.on();       // open palm turns the LED on
 #if USE_LED_MATRIX
-      lightGrid.clear();
-      lightGrid.drawBitmap(SMILEY, 16, 0x00FF00);  // open palm -> green smiley
-      renderMatrix();
+    lightGrid.clear();
+    lightGrid.drawBitmap(SMILEY, 16, 0x00FF00);  // open palm -> green smiley
+    renderMatrix();
 #endif
-      break;
-
-    case CommandCode::Fist:
-    case CommandCode::Off:
-      led.off();
+  }
+  else if (command == "fist" || command == "off") {
+    led.off();      // a fist (or the "off" command) turns the LED off
 #if USE_LED_MATRIX
-      lightGrid.clear();
-      renderMatrix();
+    lightGrid.clear();
+    renderMatrix();
 #endif
-      break;
-
-    case CommandCode::On:
-      led.on();
-      break;
-
-    case CommandCode::Beep:
-      // Connect a piezo buzzer signal pin to your chosen GPIO, then call
-      // buzzer.begin(D2) in setup(). Example notes: "C4", "C#4", "A5".
-      buzzer.playNote("C4", 250);
-      break;
-
-    case CommandCode::Unknown:
-      Serial.print("Unknown command: ");
-      Serial.println(command);
-      break;
+  }
+  else if (command == "on") {
+    led.on();
+  }
+  else if (command == "beep") {
+    // Connect a piezo buzzer signal pin to your chosen GPIO, then call
+    // buzzer.begin(D2) in setup(). Example notes: "C4", "C#4", "A5".
+    buzzer.playNote("C4", 250);
+  }
+  else {
+    Serial.print("Unknown command: ");
+    Serial.println(command);
   }
 
   // Servo note for curriculum projects:
@@ -162,8 +137,8 @@ void setup() {
   // buzzer.begin(D2); // Uncomment after wiring a buzzer signal pin.
 
 #if USE_LED_MATRIX
-  matrix.begin();
-  matrix.setBrightness(40);   // 256 LEDs at full white draw a LOT of current
+  FastLED.addLeds<WS2812B, MATRIX_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(40);   // 256 LEDs at full white draw a LOT of current
   lightGrid.begin(matrixWriter);
   lightGrid.drawBitmap(SMILEY, 16, 0x00FF00);  // show a face on boot
   renderMatrix();
