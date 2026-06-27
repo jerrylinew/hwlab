@@ -1090,20 +1090,80 @@ prompt: Example: "Open palm → 'stop'. I'll add `send_when(count_extended_finge
 
 #### Section: Stretch Goals
 
-Want to go further? Try one of these:
+Want to go further? Try one of these — each one is a knob already wired into the
+project, just waiting for you to turn it on.
 
-- **React to faces.** `create_app` accepts a second callback:
-  `create_app(when_hand_seen, when_face_seen)`. Write a `when_face_seen(face)`
-  that fires a command — a presence detector.
-- **Build your own website.** `App.vue` is yours to edit. Use the `command` from
-  Python to change colors, show an image, or play a sound.
-- **Talk back.** Use `receive()` plus a new button in `App.vue` to control Python
-  from the page.
+- **React to faces.** Set `ENABLE_FACE_CV = True` in `main.py` and fill in
+  `when_face_seen(face)`. Every face gives you `face.emotion` (`"happy"`,
+  `"surprised"`, or `"neutral"`) and `face.mouth_open`. Try
+  `send_when(face.emotion == "happy", "happy")` — now a smile triggers an action.
+- **Recognize objects, not just hands.** Set `ENABLE_OBJECT_CV = True` and pick an
+  `OBJECT_MODEL` — `"Cup"`, `"Shoe"`, `"Chair"`, or `"Camera"`. Then in
+  `when_object_seen(thing)`, fire on `thing.label`. This uses
+  [MediaPipe Objectron](https://github.com/google-ai-edge/mediapipe/blob/master/docs/solutions/objectron.md);
+  hold up a cup and watch it light up.
+- **Invent a brand-new gesture.** The finger counter can't tell a peace sign from
+  a rock-on sign — but the 21 hand landmarks can. Open `cv/gestures.py`, copy the
+  `is_thumbs_up` function as a template, and write your own classifier using the
+  [hand-landmark map](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker#models)
+  (each named point like `INDEX_FINGER_TIP` is a spot you can measure distances
+  between).
 - **Two-handed gestures.** `when_hand_seen` is called once *per hand*, so a single
-  call only ever sees one hand. To require *both* hands, track state across calls
-  (e.g. remember the last hand's gesture in a module-level variable).
-- **Make the XIAO react.** In `xiao/xiao.ino`, map commands like `"thumbs_up"` and
-  `"open_hand"` to your own mix of LED, buzzer, and 16×16 grid actions.
+  call only ever sees one hand. To require *both* hands, remember the last hand's
+  gesture in a module-level variable and check it on the next call.
+#### Section: Build More — On the Screen
 
-When it works, demo it to the group: make your gesture and watch the command
-land in the log — and, if you've wired up a XIAO, in the real world.
+`App.vue` is yours to redesign. It's a standard
+[Vue](https://vuejs.org/guide/introduction.html) single-file component, and the
+`command` coming from Python is just a value you can react to. The basic idea:
+when a `command` arrives, change what's on the page. From there, anything the web
+can do is fair game — swap colors, show images, animate a score counter, or play
+a sound.
+
+Resources to take further at home:
+
+- [Vue tutorial](https://vuejs.org/tutorial/) — a hands-on, in-browser intro to
+  components, reactivity, and events.
+- [MDN Web Docs](https://developer.mozilla.org/en-US/docs/Learn) — how HTML, CSS,
+  and JavaScript actually work, including the
+  [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
+  for sound and the [Canvas API](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)
+  for drawing.
+
+#### Section: Build More — In the Real World
+
+The XIAO only blinks an LED and beeps a buzzer *because that's all we wired up*.
+The board has many more pins, and each one can drive a new piece of hardware. The
+basic idea: solder or plug a part into a pin, then add a `case` to the
+`handleProjectCommand` switch in `xiao/xiao.ino` that controls it when a command
+arrives.
+
+Resources to add more hardware later:
+
+- [XIAO ESP32C3 wiki](https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/) —
+  the full pinout and what each pin can do.
+- [Seeed Grove modules](https://wiki.seeedstudio.com/Grove_System/) — plug-and-play
+  sensors and actuators (servos, displays, distance sensors) that need no soldering.
+- [Arduino Project Hub](https://projecthub.arduino.cc/) and
+  [Adafruit Learn](https://learn.adafruit.com/) — step-by-step builds you can adapt,
+  from servo motors to LED strips.
+
+#### Section: Take It Home
+
+Everything you built runs entirely on your own laptop — no cloud account, no
+subscription. To keep tinkering after the workshop and show it off to friends:
+
+1. **Clone the project to your own machine** from
+   [github.com/jerrylinew/hwlab](https://github.com/jerrylinew/hwlab). The first
+   `uvicorn main:app --reload` installs everything it needs, just like in the lab.
+2. **Save your work** with `git`. Run `git add -A && git commit -m "my gestures"`
+   after each change so you can always get back to a version that worked. New to
+   git? The [GitHub "Hello World" guide](https://docs.github.com/en/get-started/start-your-journey/hello-world)
+   walks you through it.
+3. **Make it your own demo.** Pick a gesture and a payoff your friends will
+   actually react to — a thumbs-up that plays your favorite sound, a peace sign
+   that turns the grid into a heart, a smile that flips a light on.
+
+When it works, demo it: make your gesture and watch the command land in the log —
+and, if you've wired up a XIAO, out in the real world. Then hand the camera to a
+friend and let them try.
