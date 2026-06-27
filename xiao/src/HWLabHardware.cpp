@@ -225,10 +225,82 @@ void LightGrid16x16::drawBitmap(const uint16_t* rows, int height, uint32_t color
   }
 }
 
+void LightGrid16x16::drawFrame(const uint32_t* pixels) {
+  for (int i = 0; i < 16 * 16; i++) _pixels[i] = pixels[i];
+}
+
 void LightGrid16x16::show() {
   if (!_writer) return;
   for (int y = 0; y < 16; y++) {
     for (int x = 0; x < 16; x++) _writer(x, y, getPixel(x, y));
+  }
+}
+
+// Scale a 0xRRGGBB color's brightness by level/255 (0 = off, 255 = full).
+static uint32_t scaleColor(uint32_t color, int level) {
+  int r = ((color >> 16) & 0xFF) * level / 255;
+  int g = ((color >> 8) & 0xFF) * level / 255;
+  int b = (color & 0xFF) * level / 255;
+  return ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+}
+
+uint32_t LightGrid16x16::chroma(uint8_t hue) {
+  // Walk the spectrum: red (0) -> green (85) -> blue (170) -> back to red (255).
+  if (hue < 85) {
+    return ((uint32_t)(255 - hue * 3) << 16) | ((uint32_t)(hue * 3) << 8);
+  }
+  if (hue < 170) {
+    hue -= 85;
+    return ((uint32_t)(255 - hue * 3) << 8) | (uint32_t)(hue * 3);
+  }
+  hue -= 170;
+  return ((uint32_t)(hue * 3) << 16) | (uint32_t)(255 - hue * 3);
+}
+
+void LightGrid16x16::playAnimation(Animation anim, int frame, uint32_t color) {
+  switch (anim) {
+    case Animation::Rainbow:
+      for (int y = 0; y < 16; y++) {
+        for (int x = 0; x < 16; x++) setPixel(x, y, chroma((uint8_t)((x + y) * 8 + frame * 4)));
+      }
+      break;
+
+    case Animation::Pulse: {
+      int t = frame % 32;                       // 0..31
+      int level = (t < 16 ? t : 31 - t) * 17;   // triangle wave 0..255..0
+      clear(scaleColor(color, level));
+      break;
+    }
+
+    case Animation::Sparkle: {
+      clear(0x000000);
+      // Deterministic "random" sparkles seeded by the frame (no random() so the
+      // animation is reproducible and testable).
+      for (int i = 0; i < 24; i++) {
+        uint32_t h = (uint32_t)frame * 2654435761u ^ (uint32_t)i * 40503u;
+        int idx = h % 256;
+        setPixel(idx % 16, idx / 16, color);
+      }
+      break;
+    }
+
+    case Animation::Wipe: {
+      clear(0x000000);
+      int col = frame % 17;   // 0..16 columns filled, then repeat
+      for (int x = 0; x <= col && x < 16; x++) {
+        for (int y = 0; y < 16; y++) setPixel(x, y, color);
+      }
+      break;
+    }
+
+    case Animation::Spin: {
+      clear(0x000000);
+      float angle = frame * 0.3926991f;   // ~22.5 degrees per frame
+      int x1 = 8 + (int)round(cos(angle) * 7);
+      int y1 = 8 + (int)round(sin(angle) * 7);
+      drawLine(8, 8, x1, y1, color);
+      break;
+    }
   }
 }
 

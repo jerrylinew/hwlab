@@ -4,6 +4,10 @@ import { computed, ref } from "vue";
 import { useHwLab } from "./useHwLab";
 import { formatCommandTime } from "./lib/pythonServer";
 import CodeEditor from "./components/CodeEditor.vue";
+import PixelArtStudio from "./components/PixelArtStudio.vue";
+
+// Which top-level view is showing: the lab, or the pixel-art drawing tool.
+const activeView = ref("lab");
 
 const {
   commands,
@@ -58,11 +62,22 @@ function clearHistory() {
       Webcam and command log on the left; edit your gesture code on the right.
     </p>
 
-    <p v-if="labStatus" :class="['lab-status', labStatus.kind]">
+    <div class="view-tabs">
+      <button :class="{ active: activeView === 'lab' }" @click="activeView = 'lab'">
+        Lab
+      </button>
+      <button :class="{ active: activeView === 'draw' }" @click="activeView = 'draw'">
+        Draw
+      </button>
+    </div>
+
+    <p v-if="labStatus && activeView === 'lab'" :class="['lab-status', labStatus.kind]">
       {{ labStatus.text }}
     </p>
 
-    <div class="workspace">
+    <PixelArtStudio v-if="activeView === 'draw'" />
+
+    <div v-show="activeView === 'lab'" class="workspace">
       <section class="panel video-panel">
         <h2>Webcam Feed</h2>
         <img :src="videoFeedUrl" alt="Live webcam feed from Python" />
@@ -218,6 +233,27 @@ main > h1 {
 .subtitle {
   margin: 0 0 12px;
   color: #555;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 12px;
+  flex-shrink: 0;
+}
+.view-tabs button {
+  background: #eef1f5;
+  border: 1px solid #d6dbe2;
+  border-radius: 8px;
+  color: #333;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 18px;
+}
+.view-tabs button.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
 }
 
 .lab-status {
